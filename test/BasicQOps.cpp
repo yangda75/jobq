@@ -48,9 +48,9 @@ TEST_CASE("empty q throw empty q") {
 
 TEST_CASE("close unblocks threads blocked in pop") {
     jobq::Q q{};
-    std::atomic_bool started;
-    std::atomic_bool ended;
-    std::optional<jobq::Job> j;
+    std::atomic_bool started{false};
+    std::atomic_bool ended{};
+    std::optional<jobq::Job> j{std::nullopt};
     std::thread consumer{[&started, &ended, &q, &j]() {
         started = true;
         j = q.popOne();
@@ -60,11 +60,14 @@ TEST_CASE("close unblocks threads blocked in pop") {
     using namespace std::chrono_literals;
     while (!started) {
         std::this_thread::sleep_for(10ms);
+        std::cout << "not stated\n";
     }
     q.close();
     while (!ended) {
         std::this_thread::sleep_for(10ms);
+        std::cout << "not ended\n";
     }
+    consumer.join();
     REQUIRE(j == std::nullopt);
     REQUIRE(started);
     REQUIRE(ended);

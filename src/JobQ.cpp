@@ -13,16 +13,21 @@ namespace jobq {
 struct Q::Impl {
     void pushJob(Job j) {
         {
-
             std::lock_guard lk{mtx};
+            if (closed) {
+                return;
+            }
             jobs.emplace_back(std::move(j));
         }
-        have_job.notify_one();
+        can_pop.notify_one();
     }
     std::optional<Job> popOne() {
         std::unique_lock lk{mtx};
-        while (jobs.empty()) {
-            have_job.wait(lk, [this]() { return !jobs.empty(); });
+        while (jobs.empty() && !closed) {
+            can_pop.wait(lk, [this]() { return (!jobs.empty()) || closed; });
+            if (closed) {
+                return std::nullopt;
+            }
         }
         auto job = jobs.front(); // is this copy ok?
         jobs.pop_front();
@@ -34,6 +39,9 @@ struct Q::Impl {
         if (jobs.empty()) {
             throw EmptyQ{};
         }
+        if (closed) {
+            throw EmptyQ{};
+        }
         auto job = jobs.front();
         jobs.pop_front();
         return job;
@@ -41,8 +49,8 @@ struct Q::Impl {
 
     std::optional<Job> popOneFor(int timeout_ms) {
         std::unique_lock lk{mtx};
-        if (!have_job.wait_for(lk, std::chrono::milliseconds(timeout_ms),
-                               [this]() { return !jobs.empty(); })) {
+        if (!can_pop.wait_for(lk, std::chrono::milliseconds(timeout_ms),
+                              [this]() { return !jobs.empty(); })) {
             return std::nullopt;
         }
         auto job = jobs.front();
@@ -50,11 +58,18 @@ struct Q::Impl {
         return job;
     }
 
-    void close() {}
+    void close() {
+        {
+            std::lock_guard lk{mtx};
+            closed = true;
+        }
+        can_pop.notify_all();
+    }
 
     std::list<Job> jobs;
     std::mutex mtx;
-    std::condition_variable have_job;
+    std::condition_variable can_pop;
+    bool closed{};
 };
 
 /// Q
