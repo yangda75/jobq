@@ -24,7 +24,7 @@ struct Worker::Impl {
     void runForever() {
         while (auto job = q_ref.popOne()) {
             try {
-                job();
+                (*job)();
             } catch (std::exception const &e) {
                 std::cerr << "Failed to run job, exception: " << e.what();
             }

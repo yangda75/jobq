@@ -19,7 +19,7 @@ struct Q::Impl {
         }
         have_job.notify_one();
     }
-    Job popOne() {
+    std::optional<Job> popOne() {
         std::unique_lock lk{mtx};
         while (jobs.empty()) {
             have_job.wait(lk, [this]() { return !jobs.empty(); });
@@ -50,6 +50,8 @@ struct Q::Impl {
         return job;
     }
 
+    void close() {}
+
     std::list<Job> jobs;
     std::mutex mtx;
     std::condition_variable have_job;
@@ -59,13 +61,15 @@ struct Q::Impl {
 
 void Q::pushJob(Job j) { impl_->pushJob(std::move(j)); }
 
-Job Q::popOne() { return impl_->popOne(); }
+std::optional<Job> Q::popOne() { return impl_->popOne(); }
 
 Job Q::popOneOrThrow() { return impl_->popOneOrThrow(); }
 
 std::optional<Job> Q::popOneFor(int timeout_ms) {
     return impl_->popOneFor(timeout_ms);
 }
+
+void Q::close() { impl_->close(); }
 
 Q::Q() : impl_{std::make_unique<Impl>()} {}
 

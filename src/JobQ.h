@@ -10,12 +10,16 @@ class Q {
     // synchronized push, will block until push success
     void pushJob(Job);
     // synchronized pull, only one, will block until success
-    Job popOne();
+    // if q is closed, return nullopt
+    std::optional<Job> popOne();
     // non blocking pull, throw if empty
     Job popOneOrThrow();
 
     // blocking with timeout
     std::optional<Job> popOneFor(int timeout_ms);
+
+    // after close, no push is accepted
+    void close();
 
     Q();
     ~Q();
