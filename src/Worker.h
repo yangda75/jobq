@@ -3,17 +3,17 @@
 #include <memory>
 
 namespace jobq {
-class Worker
-{
-public:
-  void runUntilEmpty();
-  void runForever();
+class Worker {
+  public:
+    // return job count finished
+    int runUntilEmpty();
+    void runForever();
 
-  explicit Worker(Q&);
-  ~Worker();
+    explicit Worker(Q &);
+    ~Worker();
 
-private:
-  struct Impl;
-  std::unique_ptr<Impl> impl_;
+  private:
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
 };
-}
+} // namespace jobq
