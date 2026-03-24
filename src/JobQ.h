@@ -8,7 +8,7 @@ namespace jobq {
 class Q {
   public:
     // synchronized push, will block until push success
-    void pushJob(Job);
+    bool pushJob(Job);
     // synchronized pull, only one, will block until success
     // if q is closed, return nullopt
     std::optional<Job> popOne();

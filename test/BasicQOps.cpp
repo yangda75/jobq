@@ -59,15 +59,39 @@ TEST_CASE("close unblocks threads blocked in pop") {
     using namespace std::chrono_literals;
     while (!started) {
         std::this_thread::sleep_for(10ms);
-        std::cout << "not stated\n";
     }
     q.close();
-    while (!ended) {
-        std::this_thread::sleep_for(10ms);
-        std::cout << "not ended\n";
-    }
+
     consumer.join();
     REQUIRE(j == std::nullopt);
     REQUIRE(started);
     REQUIRE(ended);
+}
+
+TEST_CASE("push after close returns false") {
+    jobq::Q q{};
+
+    auto push_before_close = q.pushJob([]() { std::cout << 1; });
+    REQUIRE(push_before_close);
+
+    q.close();
+    auto push_after_close = q.pushJob([]() { std::cout << 2; });
+    REQUIRE(push_after_close == false);
+}
+
+TEST_CASE("drain after close") {
+    jobq::Q q{};
+    constexpr int N = 10;
+    for (int i = 0; i < N; i++) {
+        REQUIRE(q.pushJob([i]() { std::cout << i; }));
+    }
+
+    q.close();
+    for(int i = 0; i < N; i++){
+        auto popped = q.popOne();
+        REQUIRE(popped.has_value());
+    }
+
+    auto pop_after_close_from_empty_q = q.popOne();
+    REQUIRE(pop_after_close_from_empty_q == std::nullopt);
 }
