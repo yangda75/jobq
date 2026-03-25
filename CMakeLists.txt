@@ -30,8 +30,7 @@ target_sources(
          src
          FILES
          src/Worker.h
-         src/JobQ.h
-         src/EmptyQ.h)
+         src/JobQ.h)
 
 add_executable(BasicQOpsTest test/BasicQOps.cpp)
 

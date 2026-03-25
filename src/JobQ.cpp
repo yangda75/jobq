@@ -1,5 +1,4 @@
 #include "JobQ.h"
-#include "EmptyQ.h"
 #include <chrono>
 #include <condition_variable>
 #include <iostream>
@@ -27,7 +26,7 @@ struct Q::Impl {
         while (jobs.empty() && !closed) {
             can_pop.wait(lk, [this]() { return (!jobs.empty()) || closed; });
         }
-        if(jobs.empty()){
+        if (jobs.empty()) {
             return std::nullopt;
         }
         auto job = jobs.front(); // is this copy ok?
@@ -35,23 +34,13 @@ struct Q::Impl {
         return job;
     }
 
-    Job popOneOrThrow() {
-        std::lock_guard lk{mtx};
-        if (jobs.empty()) {
-            throw EmptyQ{};
-        }
-        if (closed) {
-            throw EmptyQ{};
-        }
-        auto job = jobs.front();
-        jobs.pop_front();
-        return job;
-    }
-
     std::optional<Job> popOneFor(int timeout_ms) {
         std::unique_lock lk{mtx};
         if (!can_pop.wait_for(lk, std::chrono::milliseconds(timeout_ms),
-                              [this]() { return !jobs.empty(); })) {
+                              [this]() { return !jobs.empty() || closed; })) {
+            return std::nullopt;
+        }
+        if (closed && jobs.empty()) {
             return std::nullopt;
         }
         auto job = jobs.front();
@@ -78,8 +67,6 @@ struct Q::Impl {
 bool Q::pushJob(Job j) { return impl_->pushJob(std::move(j)); }
 
 std::optional<Job> Q::popOne() { return impl_->popOne(); }
-
-Job Q::popOneOrThrow() { return impl_->popOneOrThrow(); }
 
 std::optional<Job> Q::popOneFor(int timeout_ms) {
     return impl_->popOneFor(timeout_ms);

@@ -1,5 +1,4 @@
 #include "Worker.h"
-#include "EmptyQ.h"
 #include <iostream>
 
 namespace jobq {
@@ -9,12 +8,12 @@ struct Worker::Impl {
         std::cout << "Worker started!\n";
         while (true) {
             try {
-                auto job = q_ref.popOneOrThrow();
-                job();
+                auto job = q_ref.popOneFor(1);
+                if (!job.has_value()) {
+                    break;
+                }
+                (*job)();
                 job_cnt++;
-            } catch (EmptyQ const &) {
-                std::cout << "jobs finished: " << job_cnt << "\n";
-                return job_cnt;
             } catch (std::exception const &e) {
                 std::cerr << "Failed to run job, exception: " << e.what();
             }

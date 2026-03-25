@@ -1,4 +1,3 @@
-#include "EmptyQ.h"
 #include "JobQ.h"
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
@@ -38,11 +37,6 @@ TEST_CASE("test 100 jobs") {
         std::cout << "sum : " << sum << "\n";
     }
     REQUIRE(sum == 5050);
-}
-
-TEST_CASE("empty q throw empty q") {
-    jobq::Q q{};
-    REQUIRE_THROWS_AS(q.popOneOrThrow(), jobq::EmptyQ);
 }
 
 TEST_CASE("close unblocks threads blocked in pop") {
@@ -87,7 +81,7 @@ TEST_CASE("drain after close") {
     }
 
     q.close();
-    for(int i = 0; i < N; i++){
+    for (int i = 0; i < N; i++) {
         auto popped = q.popOne();
         REQUIRE(popped.has_value());
     }

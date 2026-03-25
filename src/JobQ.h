@@ -12,8 +12,6 @@ class Q {
     // synchronized pull, only one, will block until success
     // if q is closed, return nullopt
     std::optional<Job> popOne();
-    // non blocking pull, throw if empty
-    Job popOneOrThrow();
 
     // blocking with timeout
     std::optional<Job> popOneFor(int timeout_ms);
