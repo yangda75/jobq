@@ -37,7 +37,7 @@ struct Q::Impl {
     std::optional<Job> popOneFor(int timeout_ms) {
         std::unique_lock lk{mtx};
         if (!can_pop.wait_for(lk, std::chrono::milliseconds(timeout_ms),
-                              [this]() { return !jobs.empty() || closed; })) {
+                              [this]() { return (!jobs.empty()) || closed; })) {
             return std::nullopt;
         }
         if (closed && jobs.empty()) {

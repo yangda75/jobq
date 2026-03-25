@@ -4,9 +4,11 @@
 线程安全的任务队列。
 ### 生命周期
 ```mermaid
-graph Q.Lifecycle;
-    OPEN-->CLOSING;
-    CLOSING-->CLOSED;
+stateDiagram
+    [*]  --> OPEN
+    OPEN --> CLOSING
+    CLOSING --> CLOSED
+    CLOSED --> [*]
 ```
 从构造开始，处于`OPEN`状态；调用`close`后，进入`CLOSING`状态；`CLOSING`状态中，不再接受push，pop到队列为空时，进入`CLOSED`状态。
 
@@ -20,6 +22,13 @@ graph Q.Lifecycle;
 - Q: 限时的 `popOnFor` 操作，在 `close`时会怎么样？A:会立刻结束等待，返回std::nullopt。
 - Q: 生产者会和 `close`有竞争吗？A: 不会，`close` 的同时不能`push`。
 
+### 操作效果
+|状态|push|popOne|popOneFor|close|
+|---|---|---|---|---|
+|OPEN|成功入队，返回true|有元素时，出队；没有时等待|有元素时出队；没有时等待；超时后还没有返回nullopt|成功，进入CLOSING|
+|CLOSING|失败，返回false|有元素时，出队；没有元素时，返回nullopt，进入CLOSED|有元素时出队；没有时返回nullopt，进入CLOSED|成功，状态不变|
+|CLOSED|失败，返回false|返回nullopt|返回nullopt|没有影响|
+
 ### FIFO
 - Q: MPMC 场景下的顺序保证？A: 全局顺序，global ordering。即，严格按照先入队先出队
-的顺序，不论执行操作的是哪个线程。
+的顺序，但是，由于有多个消费者，执行的顺序无法保证。
