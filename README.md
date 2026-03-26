@@ -16,11 +16,14 @@ stateDiagram
 `jobq::Q::close()` 用于关闭队列。
 - Q: 是幂等的吗？A: 是的。多次调用，效果一致
 - Q: 调用close时，是否会唤醒所有等待的线程？A: 会。`popOne` 和 `popOneFor` 都只
-在队列为空时等待，`close`后，队列会永远为空了，因此不需要再等待。
+在队列为空时等待，`close`后，队列会永远不会再加入新元素了，因此不需要再等待。
 - Q: 已经入队的任务，在`close`后，还能使用吗？A: 可以，在`close`后，如果队列中还有元素，`pop` 和 `popOneFor`都能继续获取。
 - Q: 由于队列为空，正在等待的 `pop` 操作，在`close`时会怎么样？A: 会结束等待，返回std::nullopt。
 - Q: 限时的 `popOnFor` 操作，在 `close`时会怎么样？A:会立刻结束等待，返回std::nullopt。
-- Q: 生产者会和 `close`有竞争吗？A: 不会，`close` 的同时不能`push`。
+- Q: 生产者会和 `close`有竞争吗？A: `close` 的同时不能`push`，如果有多个`push`和`close`竞争，`close`开始前的能够成功，结束后的会失败。
+- Q: 调用`close`时，`popOneFor`的返回和超时时有什么区别？A: 调用`close`时，
+  `popOneFor`会停止等待，检查队列中是否有元素，有的话出队一个元素并返回，没有的
+  话返回nullopt；超时时，会返回std::nullopt
 
 ### 操作效果
 |状态|push|popOne|popOneFor|close|
@@ -30,5 +33,10 @@ stateDiagram
 |CLOSED|失败，返回false|返回nullopt|返回nullopt|没有影响|
 
 ### FIFO
-- Q: MPMC 场景下的顺序保证？A: 全局顺序，global ordering。即，严格按照先入队先出队
-的顺序，但是，由于有多个消费者，执行的顺序无法保证。
+- Q: MPMC 场景下的顺序保证？A: 全局顺序，global ordering。即，如果有多个生产者
+同时向队列中push，多个消费者从队列中pop，出队的顺序和入队的顺序完全一致，但是，
+由于多个线程执行，先出队的，不一定先执行完成。如果按照顺序push成功了a,b,c三个元
+素，保证出队的顺序也是a,b,c
+
+### 异常
+不会抛出异常
