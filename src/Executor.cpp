@@ -32,7 +32,7 @@ struct Executor::Impl {
         // runForever 会执行完剩下的任务
     }
 
-    void submitJob(Job j) { q.pushJob(j); }
+    bool submitJob(Job j) { return q.pushJob(j); }
 };
 
 /// api
@@ -46,7 +46,7 @@ void Executor::registerSource(Source *) {
 
 void Executor::run() { impl_->run(); }
 
-void Executor::submitJob(Job j) { impl_->submitJob(j); }
+bool Executor::submitJob(Job j) { return impl_->submitJob(j); }
 
 void Executor::shutdown() {
     // TODO

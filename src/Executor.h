@@ -9,7 +9,7 @@ namespace jobq {
 class Executor {
   public:
     void registerSource(Source*);
-    void submitJob(Job j);
+    bool submitJob(Job j);
     // like spin
     void run();
     // stop accepting new task, and discard remaining tasks
