@@ -34,7 +34,9 @@ target_sources(
          FILES
          src/Log.h
          src/Worker.h
-         src/JobQ.h)
+         src/JobQ.h
+         src/Executor.h
+       )
 target_link_libraries(jobq PUBLIC spdlog::spdlog)
 
 add_executable(BasicQOpsTest test/BasicQOps.cpp)
