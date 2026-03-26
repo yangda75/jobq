@@ -38,6 +38,7 @@ TEST_CASE("bursted") {
     for (auto &t : producers) {
         t.join();
     }
+    q.close();
     for (auto &t : consumers) {
         t.join();
     }

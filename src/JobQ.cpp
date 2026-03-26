@@ -59,7 +59,7 @@ struct Q::Impl {
     std::list<Job> jobs;
     std::mutex mtx;
     std::condition_variable can_pop;
-    bool closed{};
+    bool closed{false};
 };
 
 /// Q

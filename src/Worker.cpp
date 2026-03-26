@@ -5,7 +5,6 @@ namespace jobq {
 struct Worker::Impl {
     Impl(Q &q) : q_ref{q} {}
     int runUntilEmpty() {
-        std::cout << "Worker started!\n";
         while (true) {
             try {
                 auto job = q_ref.popOneFor(1);
@@ -18,7 +17,7 @@ struct Worker::Impl {
                 std::cerr << "Failed to run job, exception: " << e.what();
             }
         }
-        return 0;
+        return job_cnt;
     }
     void runForever() {
         while (auto job = q_ref.popOne()) {
