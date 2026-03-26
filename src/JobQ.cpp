@@ -1,7 +1,7 @@
 #include "JobQ.h"
 #include <chrono>
 #include <condition_variable>
-#include <iostream>
+#include "Log.h"
 #include <list>
 #include <mutex>
 #include <thread>

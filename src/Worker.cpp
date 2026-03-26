@@ -1,10 +1,11 @@
 #include "Worker.h"
-#include <iostream>
+#include "Log.h"
 
 namespace jobq {
 struct Worker::Impl {
     Impl(Q &q) : q_ref{q} {}
     int runUntilEmpty() {
+        loginfo("worker started");
         while (true) {
             try {
                 auto job = q_ref.popOneFor(1);
@@ -14,9 +15,10 @@ struct Worker::Impl {
                 (*job)();
                 job_cnt++;
             } catch (std::exception const &e) {
-                std::cerr << "Failed to run job, exception: " << e.what();
+                logerror("Failed to run job, exception: {}", e.what());
             }
         }
+        loginfo("worker done after {} jobs", job_cnt);
         return job_cnt;
     }
     void runForever() {
@@ -24,7 +26,7 @@ struct Worker::Impl {
             try {
                 (*job)();
             } catch (std::exception const &e) {
-                std::cerr << "Failed to run job, exception: " << e.what();
+                logerror("Failed to run job, exception: {}", e.what());
             }
         }
     }

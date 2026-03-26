@@ -4,16 +4,19 @@ project(JobQ LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD_REQUIRED 20)
 
-# catch2
 include(FetchContent)
 
 FetchContent_Declare(
   Catch2
   GIT_REPOSITORY https://github.com/catchorg/Catch2.git
   GIT_TAG v3.8.1)
-
 FetchContent_MakeAvailable(Catch2)
-# end of catch2
+
+FetchContent_Declare(
+  spdlog
+  GIT_REPOSITORY https://github.com/gabime/spdlog.git
+  GIT_TAG v2.x)
+FetchContent_MakeAvailable(spdlog)
 
 if(ENABLE_TSAN)
   add_compile_options(-fsanitize=thread)
@@ -29,8 +32,10 @@ target_sources(
          BASE_DIRS
          src
          FILES
+         src/Log.h
          src/Worker.h
          src/JobQ.h)
+target_link_libraries(jobq PUBLIC spdlog::spdlog)
 
 add_executable(BasicQOpsTest test/BasicQOps.cpp)
 

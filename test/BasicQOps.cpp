@@ -1,7 +1,7 @@
 #include "JobQ.h"
+#include "Log.h"
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
-#include <iostream>
 #include <thread>
 
 TEST_CASE("test basic push operation compiles") {
@@ -26,7 +26,7 @@ TEST_CASE("test 100 jobs") {
     int sum = 0;
     for (auto i = 0; i < N; i++) {
         auto job = [i, &sum]() {
-            std::cout << "val : " << i << "\n";
+            jobq::loginfo("val:{}", i);
             sum += i + 1;
         };
         q.pushJob(std::move(job));
@@ -34,7 +34,7 @@ TEST_CASE("test 100 jobs") {
     for (auto i = 0; i < N; i++) {
         auto job = q.popOne();
         (*job)();
-        std::cout << "sum : " << sum << "\n";
+        jobq::loginfo("sum: {}", sum);
     }
     REQUIRE(sum == 5050);
 }
@@ -65,11 +65,11 @@ TEST_CASE("close unblocks threads blocked in pop") {
 TEST_CASE("push after close returns false") {
     jobq::Q q{};
 
-    auto push_before_close = q.pushJob([]() { std::cout << 1; });
+    auto push_before_close = q.pushJob([]() { jobq::loginfo("1"); });
     REQUIRE(push_before_close);
 
     q.close();
-    auto push_after_close = q.pushJob([]() { std::cout << 2; });
+    auto push_after_close = q.pushJob([]() { jobq::loginfo("2"); });
     REQUIRE(push_after_close == false);
 }
 
@@ -77,7 +77,7 @@ TEST_CASE("drain after close") {
     jobq::Q q{};
     constexpr int N = 10;
     for (int i = 0; i < N; i++) {
-        REQUIRE(q.pushJob([i]() { std::cout << i; }));
+        REQUIRE(q.pushJob([i]() { jobq::loginfo("{}", i); }));
     }
 
     q.close();
