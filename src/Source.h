@@ -2,5 +2,8 @@
 
 namespace jobq {
 /// 任务来源
-class Source {};
+class Source {
+
+};
+
 } // namespace jobq

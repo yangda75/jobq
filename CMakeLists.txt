@@ -26,7 +26,7 @@ endif()
 add_library(jobq)
 target_sources(
   jobq
-  PRIVATE src/JobQ.cpp src/Worker.cpp
+  PRIVATE src/JobQ.cpp src/Worker.cpp src/Executor.cpp
   PUBLIC FILE_SET
          HEADERS
          BASE_DIRS
@@ -47,6 +47,9 @@ target_link_libraries(WorkerTest PRIVATE Catch2::Catch2WithMain jobq)
 add_executable(MPMCTest test/MPMC.cpp)
 target_link_libraries(MPMCTest PRIVATE Catch2::Catch2WithMain jobq)
 
+add_executable(ExecutorTest test/Executor.cpp)
+target_link_libraries(ExecutorTest PRIVATE Catch2::Catch2WithMain jobq)
+
 # catch2 ctest integration
 list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 include(CTest)
@@ -54,3 +57,4 @@ include(Catch)
 catch_discover_tests(BasicQOpsTest)
 catch_discover_tests(WorkerTest)
 catch_discover_tests(MPMCTest)
+catch_discover_tests(ExecutorTest)
