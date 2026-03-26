@@ -12,13 +12,14 @@ struct Executor::Impl {
     Q q{};
     std::vector<std::thread> worker_threads{};
     std::vector<Source *> sources{};
+    std::vector<Worker> workers{};
 
     void run() {
         // start worker threads
         for (int i = 0; i < WORKER_THREADS_PER_EXECUTOR; i++) {
+            workers.emplace_back(q);
             worker_threads.emplace_back(std::thread{[this, i]() {
-                Worker w{q};
-                // ? Do I need to use these workers in other place?
+                auto &w = workers[i];
                 w.runForever();
             }});
         }
@@ -33,6 +34,17 @@ struct Executor::Impl {
     }
 
     bool submitJob(Job j) { return q.pushJob(j); }
+
+    void shutdown() {
+        q.close();
+        for (auto &w : workers) {
+            w.stop();
+        }
+        // drain the q, discarding
+        while (auto job = q.popOne()) {
+            // TODO log metadata on discard
+        }
+    }
 };
 
 /// api
@@ -48,9 +60,7 @@ void Executor::run() { impl_->run(); }
 
 bool Executor::submitJob(Job j) { return impl_->submitJob(j); }
 
-void Executor::shutdown() {
-    // TODO
-}
+void Executor::shutdown() { impl_->shutdown(); }
 
 void Executor::shutdownAndDrain() { impl_->shutdownAndDrain(); }
 

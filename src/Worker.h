@@ -8,9 +8,12 @@ class Worker {
     // return job count finished
     int runUntilEmpty();
     void runForever();
+    void stop();
 
     explicit Worker(Q &);
     ~Worker();
+    Worker(Worker&&);
+    Worker& operator=(Worker&&);
 
   private:
     struct Impl;

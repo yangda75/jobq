@@ -1,8 +1,10 @@
 #include "Worker.h"
 #include "Log.h"
+#include <atomic>
 
 namespace jobq {
 struct Worker::Impl {
+    std::atomic_bool stopped{};
     Impl(Q &q) : q_ref{q} {}
     int runUntilEmpty() {
         loginfo("worker started");
@@ -28,8 +30,13 @@ struct Worker::Impl {
             } catch (std::exception const &e) {
                 logerror("Failed to run job, exception: {}", e.what());
             }
+            if (stopped) {
+                break;
+            }
         }
     }
+
+    void stop() { stopped = true; }
 
     Q &q_ref;
     int job_cnt{};
@@ -40,8 +47,16 @@ struct Worker::Impl {
 Worker::Worker(Q &q) : impl_{std::make_unique<Impl>(q)} {}
 Worker::~Worker() = default;
 
+Worker::Worker(Worker &&rhs) : impl_{std::move(rhs.impl_)} {}
+Worker &Worker::operator=(Worker &&rhs) {
+    impl_ = std::move(rhs.impl_);
+    return *this;
+}
+
 int Worker::runUntilEmpty() { return impl_->runUntilEmpty(); }
 
 void Worker::runForever() { impl_->runForever(); }
+
+void Worker::stop() { impl_->stop(); }
 
 } // namespace jobq
