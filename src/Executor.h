@@ -12,7 +12,7 @@ class Executor {
     bool submitJob(Job j);
     // like spin
     void run();
-    // stop accepting new task, and discard remaining tasks
+    // stop accepting new task, finish current task, and discard remaining tasks
     void shutdown();
     // stop accepting new task, and drain remaining tasks
     void shutdownAndDrain();

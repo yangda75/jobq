@@ -1,4 +1,5 @@
 #include "Executor.h"
+#include "Log.h"
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <thread>
@@ -68,4 +69,36 @@ TEST_CASE("after shutdown, remaining jobs will not run") {
     std::thread t{[&ex]() { ex.run(); }};
     t.join();
     REQUIRE(cnt == 10);
+}
+
+TEST_CASE("empty job and run, will wait for new jobs") {
+    jobq::Executor ex{};
+    std::atomic_bool finished{false};
+    std::thread t{[&ex, &finished]() {
+        ex.run();
+        finished = true;
+    }};
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    REQUIRE(!finished);
+    // stop will stop
+    ex.shutdown();
+    t.join();
+}
+
+TEST_CASE("shutdown empty executor is fine") {
+    jobq::Executor ex{};
+    ex.shutdown();
+    REQUIRE(!ex.submitJob([]() { jobq::loginfo("some info"); }));
+    ex.shutdown();
+    REQUIRE(!ex.submitJob([]() { jobq::loginfo("some info"); }));
+    ex.shutdownAndDrain();
+    REQUIRE(!ex.submitJob([]() { jobq::loginfo("some info"); }));
+    ex.shutdownAndDrain();
+    REQUIRE(!ex.submitJob([]() { jobq::loginfo("some info"); }));
+
+    // run after shutdown
+    std::thread t{[&ex]() { ex.run(); }};
+    // finish immediately
+    t.join();
 }
