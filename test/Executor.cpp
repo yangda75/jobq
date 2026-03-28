@@ -102,3 +102,51 @@ TEST_CASE("shutdown empty executor is fine") {
     // finish immediately
     t.join();
 }
+
+TEST_CASE("shutdown will get jobs discarded") {
+    jobq::Executor ex{};
+
+    std::atomic_bool flag{};
+    REQUIRE(ex.submitJob([&flag]() {
+        while (!flag) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+    }));
+
+    std::atomic_int finished_cnt{};
+    for (int i = 0; i < 100; i++) {
+        REQUIRE(ex.submitJob([&finished_cnt]() { finished_cnt++; }));
+    }
+    std::thread t{[&ex]() { ex.run(); }};
+    // shutdown executor
+    ex.shutdown();
+    // release blocking job
+    flag = true;
+    t.join();
+    // check all other jobs are discarded
+    REQUIRE(finished_cnt == 0);
+}
+
+TEST_CASE("shutdownAndDrain will get already submitted jobs finished") {
+    jobq::Executor ex{};
+
+    std::atomic_bool flag{};
+    REQUIRE(ex.submitJob([&flag]() {
+        while (!flag) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+    }));
+
+    std::atomic_int finished_cnt{};
+    for (int i = 0; i < 100; i++) {
+        REQUIRE(ex.submitJob([&finished_cnt]() { finished_cnt++; }));
+    }
+    std::thread t{[&ex]() { ex.run(); }};
+    // shutdown executor
+    ex.shutdownAndDrain();
+    // release blocking job
+    flag = true;
+    t.join();
+    // check all other jobs are discarded
+    REQUIRE(finished_cnt == 100);
+}
