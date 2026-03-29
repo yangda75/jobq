@@ -26,7 +26,7 @@ endif()
 add_library(jobq)
 target_sources(
   jobq
-  PRIVATE src/JobQ.cpp src/Worker.cpp src/Executor.cpp
+  PRIVATE src/JobQ.cpp src/Worker.cpp src/Executor.cpp src/TimerSource.cpp
   PUBLIC FILE_SET
          HEADERS
          BASE_DIRS
@@ -36,6 +36,8 @@ target_sources(
          src/Worker.h
          src/JobQ.h
          src/Executor.h
+         src/TimerSource.h
+         src/Source.h
        )
 target_link_libraries(jobq PUBLIC spdlog::spdlog)
 

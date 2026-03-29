@@ -52,6 +52,11 @@ struct Executor::Impl {
             // TODO log metadata on discard
         }
     }
+
+    void registerSource(Source *src) {
+        std::lock_guard lk{m};
+        sources.push_back(src);
+    }
 };
 
 /// api
@@ -59,9 +64,7 @@ struct Executor::Impl {
 Executor::Executor() : impl_{std::make_unique<Impl>()} {}
 Executor::~Executor() = default;
 
-void Executor::registerSource(Source *) {
-    // TODO
-}
+void Executor::registerSource(Source *src) { impl_->registerSource(src); }
 
 void Executor::run() { impl_->run(); }
 

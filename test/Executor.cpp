@@ -1,7 +1,9 @@
 #include "Executor.h"
 #include "Log.h"
+#include "TimerSource.h"
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
+#include <memory>
 #include <thread>
 
 TEST_CASE("run will run") {
@@ -179,4 +181,11 @@ TEST_CASE("shutdownAndDrain before run with queued jobs") {
     t.join();
 
     REQUIRE(finished_cnt == 10);
+}
+
+TEST_CASE("registerSource compiles") {
+    jobq::Executor ex{};
+    jobq::TimerSource timer_src{jobq::TimerSource::Mode::ONE_SHOT, 100};
+    jobq::Source *src = &timer_src;
+    ex.registerSource(src);
 }
