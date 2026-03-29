@@ -8,9 +8,9 @@ namespace jobq {
 /// 1.wait 2.take 3.execute
 class Executor {
   public:
-    void registerSource(Source*);
+    //void registerSource(Source*);
     bool submitJob(Job j);
-    // like spin
+    // like spin, one-shot, blocking
     void run();
     // stop accepting new task, finish current task, and discard remaining tasks
     void shutdown();
