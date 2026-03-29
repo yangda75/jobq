@@ -150,3 +150,33 @@ TEST_CASE("shutdownAndDrain will get already submitted jobs finished") {
     // check all other jobs are discarded
     REQUIRE(finished_cnt == 100);
 }
+
+TEST_CASE("shutdown before run with queued jobs") {
+    jobq::Executor ex{};
+    std::atomic_int finished_cnt{};
+
+    for (int i = 0; i < 10; i++) {
+        ex.submitJob([&finished_cnt]() { finished_cnt++; });
+    }
+    // shutdown before run
+    ex.shutdown();
+    std::thread t{[&ex]() { ex.run(); }};
+    t.join();
+
+    REQUIRE(finished_cnt == 0);
+}
+
+TEST_CASE("shutdownAndDrain before run with queued jobs") {
+    jobq::Executor ex{};
+    std::atomic_int finished_cnt{};
+
+    for (int i = 0; i < 10; i++) {
+        ex.submitJob([&finished_cnt]() { finished_cnt++; });
+    }
+    // shutdown before run
+    ex.shutdownAndDrain();
+    std::thread t{[&ex]() { ex.run(); }};
+    t.join();
+
+    REQUIRE(finished_cnt == 10);
+}
