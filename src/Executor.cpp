@@ -1,6 +1,7 @@
 #include "Executor.h"
 #include "JobQ.h"
 #include "Worker.h"
+#include <chrono>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -15,6 +16,27 @@ struct Executor::Impl {
     std::vector<Source *> sources{};
     std::vector<Worker> workers{};
     std::mutex m{}; // guards access to workers vector, not worker_threads
+    std::thread dispatcher{};
+    void fetchAndDispatch() {
+        for (;;) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            auto all_finished = true;
+            for (auto &src : sources) {
+                if (src->isFinished()) {
+                    continue;
+                }
+                all_finished = false;
+                if (src->isReady()) {
+                    if (auto job = src->takeJob()) {
+                        submitJob(*job);
+                    }
+                }
+            }
+            if (all_finished) {
+                break;
+            }
+        }
+    }
     void run() {
         {
             std::lock_guard lk{m};
@@ -27,6 +49,9 @@ struct Executor::Impl {
                 }});
             }
         }
+        // start dispatcher
+        dispatcher = std::thread{[this]() { fetchAndDispatch(); }};
+        dispatcher.join();
         for (auto &t : worker_threads) {
             t.join();
         }

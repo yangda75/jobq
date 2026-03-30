@@ -1,5 +1,6 @@
 #pragma once
 #include "Source.h"
+#include <chrono>
 
 namespace jobq {
 class TimerSource final : public Source {
@@ -10,7 +11,7 @@ class TimerSource final : public Source {
         REPEATING,
     };
 
-    TimerSource(Mode mode, int timeout_ms);
+    TimerSource(Mode mode, int timeout_ms, Job job);
 
     bool isReady() override;
     std::optional<Job> takeJob() override;
@@ -24,5 +25,8 @@ class TimerSource final : public Source {
     Mode mode_{};
     std::optional<Job> ready_job_{};
     bool stopped_{};
+    std::chrono::system_clock::time_point start_time_{};
+    Job job_{};
+    bool finished_{};
 };
 } // namespace jobq

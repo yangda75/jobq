@@ -185,7 +185,8 @@ TEST_CASE("shutdownAndDrain before run with queued jobs") {
 
 TEST_CASE("registerSource compiles") {
     jobq::Executor ex{};
-    jobq::TimerSource timer_src{jobq::TimerSource::Mode::ONE_SHOT, 100};
+    jobq::TimerSource timer_src{jobq::TimerSource::Mode::ONE_SHOT, 100,
+                                []() { jobq::loginfo("timer!!!"); }};
     jobq::Source *src = &timer_src;
     ex.registerSource(src);
 }
