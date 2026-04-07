@@ -25,7 +25,7 @@ class TimerSource final : public Source {
     Mode mode_{};
     std::optional<Job> ready_job_{};
     std::atomic_bool stopped_{};
-    std::chrono::system_clock::time_point start_time_{};
+    std::chrono::steady_clock::time_point start_time_{};
     Job job_{};
     std::atomic_bool finished_{};
 };

@@ -47,6 +47,7 @@ struct Executor::Impl {
     void run() {
         {
             std::lock_guard lk{m};
+            workers.reserve(WORKER_THREADS_PER_EXECUTOR);
             // start worker threads
             for (int i = 0; i < WORKER_THREADS_PER_EXECUTOR; i++) {
                 workers.emplace_back(q);
