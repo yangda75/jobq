@@ -23,7 +23,12 @@ struct Executor::Impl {
         while (!stopped) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
             auto all_finished = true;
-            for (auto &src : sources) {
+            auto sources_copy = decltype(sources){};
+            {
+                std::lock_guard lk{m};
+                sources_copy = sources;
+            }
+            for (auto &src : sources_copy) {
                 loginfo("checking src: {}", src->id());
                 if (src->isFinished()) {
                     loginfo("src: {} finished", src->id());
