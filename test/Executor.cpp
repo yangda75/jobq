@@ -206,3 +206,19 @@ TEST_CASE("timerSource working") {
 
     REQUIRE(job_done);
 }
+
+TEST_CASE("repeating timer source working") {
+    jobq::Executor ex{};
+    std::atomic_int num_job_done{false};
+    jobq::TimerSource timer_src{jobq::TimerSource::Mode::REPEATING, 10,
+                                [&num_job_done]() { ++num_job_done; }};
+    jobq::Source *src = &timer_src;
+    ex.registerSource(src);
+    std::thread th{[&ex]() { ex.run(); }};
+    using namespace std::chrono_literals;
+    std::this_thread::sleep_for(100ms);
+    ex.shutdownAndDrain();
+    th.join();
+
+    REQUIRE(num_job_done == 10);
+}
