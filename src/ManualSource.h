@@ -16,5 +16,7 @@ class ManualSource final : public Source {
 
   private:
     Job job_;
+    std::atomic_bool finished_;
+    std::atomic_bool stopped_;
 };
 } // namespace jobq
