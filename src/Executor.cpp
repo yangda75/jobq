@@ -14,7 +14,7 @@ constexpr auto WORKER_THREADS_PER_EXECUTOR = 1;
 struct Executor::Impl {
     Q q{};
     std::vector<std::thread> worker_threads{};
-    std::vector<Source *> sources{};
+    std::vector<std::shared_ptr<Source>> sources{};
     std::vector<Worker> workers{};
     std::mutex m{}; // guards access to workers vector, not worker_threads
     std::thread dispatcher{};
@@ -99,7 +99,7 @@ struct Executor::Impl {
         }
     }
 
-    void registerSource(Source *src) {
+    void registerSource(std::shared_ptr<Source> src) {
         std::lock_guard lk{m};
         loginfo("register source : {}", src->id());
         sources.push_back(src);
@@ -111,7 +111,7 @@ struct Executor::Impl {
 Executor::Executor() : impl_{std::make_unique<Impl>()} {}
 Executor::~Executor() = default;
 
-void Executor::registerSource(Source *src) { impl_->registerSource(src); }
+void Executor::registerSource(std::shared_ptr<Source> src) { impl_->registerSource(src); }
 
 void Executor::run() { impl_->run(); }
 

@@ -186,18 +186,18 @@ TEST_CASE("shutdownAndDrain before run with queued jobs") {
 
 TEST_CASE("registerSource compiles") {
     jobq::Executor ex{};
-    jobq::TimerSource timer_src{jobq::TimerSource::Mode::ONE_SHOT, 100,
-                                []() { jobq::loginfo("timer!!!"); }};
-    jobq::Source *src = &timer_src;
+    std::shared_ptr<jobq::Source> src = std::make_shared<jobq::TimerSource>(
+        jobq::TimerSource::Mode::ONE_SHOT, 100,
+        []() { jobq::loginfo("timer!!!"); });
     ex.registerSource(src);
 }
 
 TEST_CASE("timerSource working") {
     jobq::Executor ex{};
     std::atomic_bool job_done{false};
-    jobq::TimerSource timer_src{jobq::TimerSource::Mode::ONE_SHOT, 10,
-                                [&job_done]() { job_done = true; }};
-    jobq::Source *src = &timer_src;
+    std::shared_ptr<jobq::Source> src = std::make_shared<jobq::TimerSource>(
+        jobq::TimerSource::Mode::ONE_SHOT, 10,
+        [&job_done]() { job_done = true; });
     ex.registerSource(src);
     std::thread th{[&ex]() { ex.run(); }};
     using namespace std::chrono_literals;
@@ -211,10 +211,12 @@ TEST_CASE("timerSource working") {
 TEST_CASE("repeating timer source working") {
     jobq::Executor ex{};
     std::atomic_int num_job_done{false};
-    jobq::TimerSource timer_src{jobq::TimerSource::Mode::REPEATING, 10,
-                                [&num_job_done]() { ++num_job_done; }};
-    jobq::Source *src = &timer_src;
+
+    std::shared_ptr<jobq::Source> src = std::make_shared<jobq::TimerSource>(
+        jobq::TimerSource::Mode::REPEATING, 10,
+        [&num_job_done]() { ++num_job_done; });
     ex.registerSource(src);
+
     std::thread th{[&ex]() { ex.run(); }};
     using namespace std::chrono_literals;
     std::this_thread::sleep_for(100ms);
@@ -226,16 +228,16 @@ TEST_CASE("repeating timer source working") {
 
 TEST_CASE("registerSource compiles with ManualSource") {
     jobq::Executor ex{};
-    jobq::ManualSource manual_src{"test", []() { jobq::loginfo("manual"); }};
-    jobq::Source *src = &manual_src;
+    std::shared_ptr<jobq::Source> src = std::make_shared<jobq::ManualSource>(
+        "test", []() { jobq::loginfo("manual"); });
     ex.registerSource(src);
 }
 
 TEST_CASE("manual source working") {
     jobq::Executor ex{};
     std::atomic_bool job_done{false};
-    jobq::ManualSource manual_src{"test", [&job_done]() { job_done = true; }};
-    jobq::Source *src = &manual_src;
+    std::shared_ptr<jobq::Source> src = std::make_shared<jobq::ManualSource>(
+        "test", [&job_done]() { job_done = true; });
 
     ex.registerSource(src);
 
