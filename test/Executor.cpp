@@ -198,8 +198,11 @@ TEST_CASE("timerSource working") {
                                 [&job_done]() { job_done = true; }};
     jobq::Source *src = &timer_src;
     ex.registerSource(src);
-
+    std::thread th{[&ex]() { ex.run(); }};
     using namespace std::chrono_literals;
     std::this_thread::sleep_for(20ms);
+    ex.shutdownAndDrain();
+    th.join();
+
     REQUIRE(job_done);
 }

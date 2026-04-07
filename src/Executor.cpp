@@ -1,5 +1,6 @@
 #include "Executor.h"
 #include "JobQ.h"
+#include "Log.h"
 #include "Worker.h"
 #include <chrono>
 #include <mutex>
@@ -22,12 +23,16 @@ struct Executor::Impl {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
             auto all_finished = true;
             for (auto &src : sources) {
+                loginfo("checking src: {}", src->id());
                 if (src->isFinished()) {
+                    loginfo("src: {} finished", src->id());
                     continue;
                 }
                 all_finished = false;
                 if (src->isReady()) {
+                    loginfo("src: {} ready", src->id());
                     if (auto job = src->takeJob()) {
+                        loginfo("src: {} got job", src->id());
                         submitJob(*job);
                     }
                 }
@@ -36,6 +41,7 @@ struct Executor::Impl {
                 break;
             }
         }
+        loginfo("fetchAndDispatch done");
     }
     void run() {
         {
@@ -80,6 +86,7 @@ struct Executor::Impl {
 
     void registerSource(Source *src) {
         std::lock_guard lk{m};
+        loginfo("register source : {}", src->id());
         sources.push_back(src);
     }
 };

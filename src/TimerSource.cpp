@@ -4,7 +4,7 @@
 namespace jobq {
 
 TimerSource::TimerSource(Mode mode, int timeout_ms, Job job)
-    : mode_{mode}, timeout_ms_{timeout_ms}, job_{job} {
+    : Source{"TimerSource"}, mode_{mode}, timeout_ms_{timeout_ms}, job_{job} {
     start_time_ = std::chrono::system_clock::now();
 }
 
