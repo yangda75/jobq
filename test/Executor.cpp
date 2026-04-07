@@ -248,3 +248,27 @@ TEST_CASE("manual source working") {
     th.join();
     REQUIRE(job_done);
 }
+
+TEST_CASE("shutdown stops timer source") {
+    jobq::Executor ex{};
+    std::atomic_int callback_cnt{};
+    std::shared_ptr<jobq::Source> src = std::make_shared<jobq::TimerSource>(
+        jobq::TimerSource::Mode::REPEATING, 10,
+        [&callback_cnt]() { callback_cnt++; });
+
+    ex.registerSource(src);
+
+    std::thread th{[&ex]() { ex.run(); }};
+    using namespace std::chrono_literals;
+    std::this_thread::sleep_for(50ms);
+    // assert callback_cnt > 1
+    REQUIRE(callback_cnt > 1);
+    auto current_callback_cnt = callback_cnt.load();
+    // shutdown and check again
+    ex.shutdown();
+
+    // new timer callbacks are not executed
+
+    th.join();
+    REQUIRE(callback_cnt == current_callback_cnt);
+}
