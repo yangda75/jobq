@@ -8,6 +8,10 @@ struct Worker::Impl {
     Impl(Q &q) : q_ref{q} {}
     int runUntilEmpty() {
         loginfo("worker started");
+        if (stopped) {
+            logerror("cannot restart stopped worker");
+            return 0;
+        }
         while (true) {
             try {
                 auto job = q_ref.popOneFor(1);
@@ -23,17 +27,24 @@ struct Worker::Impl {
         loginfo("worker done after {} jobs", job_cnt);
         return job_cnt;
     }
-    void runForever() {
+    int runForever() {
+        if (stopped) {
+            logerror("cannot restart stopped worker");
+            return 0;
+        }
         while (auto job = q_ref.popOne()) {
+            if (stopped) {
+                // a job is poped from the q, but will not run, what should I do here?
+                break;
+            }
             try {
                 (*job)();
+                job_cnt++;
             } catch (std::exception const &e) {
                 logerror("Failed to run job, exception: {}", e.what());
             }
-            if (stopped) {
-                break;
-            }
         }
+        return job_cnt;
     }
 
     void stop() { stopped = true; }
@@ -55,7 +66,7 @@ Worker &Worker::operator=(Worker &&rhs) {
 
 int Worker::runUntilEmpty() { return impl_->runUntilEmpty(); }
 
-void Worker::runForever() { impl_->runForever(); }
+int Worker::runForever() { return impl_->runForever(); }
 
 void Worker::stop() { impl_->stop(); }
 

@@ -40,3 +40,48 @@ stateDiagram
 
 ### 异常
 不会抛出异常
+
+## jobq::Worker
+执行任务的“工作者”
+
+### 生命周期
+```mermaid
+stateDiagram
+    [*] --> CREATED
+    CREATED --> RUNNING
+    RUNNING --> STOPPED
+    STOPPED --> [*]
+```
+构造后，不会立刻开始执行。需要调用 `runUntilEmpty` 或者 `runForever` 开始，开始后，或者没有开始时，调用 `stop`，不再执行新任务
+
+### stop
+`jobq::Worker::stop()` 用来停止执行任务。
+-Q: 是幂等的吗？A: 是的。多次调用效果一致。
+
+### runUntilEmpty
+
+### runForever
+执行任务直到被停止。
+调用`stop`后，可能有一个任务从队列中出队但是不会执行。
+
+## jobq::Source
+任务源，用于发布任务，比如定时任务、手动任务等。
+
+## jobq::Executor
+执行器，从任务源拉取任务，加入队列中，给执行者来做。
+
+### 生命周期
+```mermaid
+stateDiagram
+    [*] --> CREATED
+    CREATED --> RUNNING
+    RUNNING --> STOPPING
+    STOPPING --> STOPPED
+    STOPPED --> [*]
+```
+调用 `run` 的线程作为“管家”线程，启动一组工作线程，和一个任务拉取线程。
+调用`shutdown`，不再接受新任务，完成当前正在执行任务后，丢弃所有未完成任务；调用`shutdownAndDrain`后，不再接受新任务，完成已在队列中的所有任务。
+
+
+
+

@@ -7,7 +7,7 @@ class Worker {
   public:
     // return job count finished
     int runUntilEmpty();
-    void runForever();
+    int runForever();
     void stop();
 
     explicit Worker(Q &);
