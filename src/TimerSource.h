@@ -24,9 +24,9 @@ class TimerSource final : public Source {
     int timeout_ms_{};
     Mode mode_{};
     std::optional<Job> ready_job_{};
-    bool stopped_{};
+    std::atomic_bool stopped_{};
     std::chrono::system_clock::time_point start_time_{};
     Job job_{};
-    bool finished_{};
+    std::atomic_bool finished_{};
 };
 } // namespace jobq
