@@ -230,3 +230,19 @@ TEST_CASE("registerSource compiles with ManualSource") {
     jobq::Source *src = &manual_src;
     ex.registerSource(src);
 }
+
+TEST_CASE("manual source working") {
+    jobq::Executor ex{};
+    std::atomic_bool job_done{false};
+    jobq::ManualSource manual_src{"test", [&job_done]() { job_done = true; }};
+    jobq::Source *src = &manual_src;
+
+    ex.registerSource(src);
+
+    std::thread th{[&ex]() { ex.run(); }};
+    using namespace std::chrono_literals;
+    std::this_thread::sleep_for(20ms);
+    ex.shutdownAndDrain();
+    th.join();
+    REQUIRE(job_done);
+}
