@@ -18,8 +18,9 @@ struct Executor::Impl {
     std::vector<Worker> workers{};
     std::mutex m{}; // guards access to workers vector, not worker_threads
     std::thread dispatcher{};
+    std::atomic_bool stopped{false};
     void fetchAndDispatch() {
-        for (;;) {
+        while (!stopped) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
             auto all_finished = true;
             for (auto &src : sources) {
@@ -65,6 +66,13 @@ struct Executor::Impl {
 
     void shutdownAndDrain() {
         q.close();
+        stopped = true;
+        // shutdown all sources
+        std::lock_guard lk{m};
+        for (auto src : sources) {
+            loginfo("stopping source: {}", src->id());
+            src->stop();
+        }
         // runForever 会执行完剩下的任务
     }
 
@@ -72,6 +80,7 @@ struct Executor::Impl {
 
     void shutdown() {
         q.close();
+        stopped = true;
         {
             std::lock_guard lk{m};
             for (auto &w : workers) {

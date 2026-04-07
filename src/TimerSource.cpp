@@ -14,8 +14,19 @@ std::optional<Job> TimerSource::takeJob() {
     }
     if (isReady()) {
         ready_job_ = job_;
-        // once the timer is fired, it is finished
-        finished_ = true;
+        switch (mode_) {
+        case Mode::ONE_SHOT: {
+            finished_ = true;
+            break;
+        }
+        case Mode::REPEATING: {
+            // reset start time
+            start_time_ = std::chrono::system_clock::now();
+            break;
+        }
+        default:
+            break;
+        }
         return job_;
     }
     return ready_job_;
