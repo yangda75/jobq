@@ -12,21 +12,19 @@ std::optional<Job> TimerSource::takeJob() {
     if (stopped_) {
         return std::nullopt;
     }
-    if (isReady()) {
-        switch (mode_) {
-        case Mode::ONE_SHOT: {
-            finished_ = true;
-            break;
-        }
-        case Mode::REPEATING: {
-            // reset start time
-            start_time_ = std::chrono::steady_clock::now();
-            break;
-        }
-        default:
-            break;
-        }
-        return job_;
+    // isReady should be true here
+    switch (mode_) {
+    case Mode::ONE_SHOT: {
+        finished_ = true;
+        break;
+    }
+    case Mode::REPEATING: {
+        // reset start time
+        start_time_ = std::chrono::steady_clock::now();
+        break;
+    }
+    default:
+        break;
     }
     return job_;
 }
