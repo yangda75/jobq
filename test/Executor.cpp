@@ -1,5 +1,6 @@
 #include "Executor.h"
 #include "Log.h"
+#include "ManualSource.h"
 #include "TimerSource.h"
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
@@ -221,4 +222,11 @@ TEST_CASE("repeating timer source working") {
     th.join();
 
     REQUIRE(num_job_done > 1);
+}
+
+TEST_CASE("registerSource compiles with ManualSource") {
+    jobq::Executor ex{};
+    jobq::ManualSource manual_src{"test", []() { jobq::loginfo("manual"); }};
+    jobq::Source *src = &manual_src;
+    ex.registerSource(src);
 }
