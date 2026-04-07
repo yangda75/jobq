@@ -41,7 +41,7 @@ bool TimerSource::isReady() {
     return millis > timeout_ms_;
 }
 
-bool TimerSource::isFinished() { return finished_; }
+bool TimerSource::isFinished() { return finished_ || stopped_; }
 
 TimerSource::~TimerSource() = default;
 
