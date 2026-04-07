@@ -190,3 +190,16 @@ TEST_CASE("registerSource compiles") {
     jobq::Source *src = &timer_src;
     ex.registerSource(src);
 }
+
+TEST_CASE("timerSource working") {
+    jobq::Executor ex{};
+    std::atomic_bool job_done{false};
+    jobq::TimerSource timer_src{jobq::TimerSource::Mode::ONE_SHOT, 10,
+                                [&job_done]() { job_done = true; }};
+    jobq::Source *src = &timer_src;
+    ex.registerSource(src);
+
+    using namespace std::chrono_literals;
+    std::this_thread::sleep_for(20ms);
+    REQUIRE(job_done);
+}
