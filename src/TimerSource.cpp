@@ -13,7 +13,6 @@ std::optional<Job> TimerSource::takeJob() {
         return std::nullopt;
     }
     if (isReady()) {
-        ready_job_ = job_;
         switch (mode_) {
         case Mode::ONE_SHOT: {
             finished_ = true;
@@ -29,7 +28,7 @@ std::optional<Job> TimerSource::takeJob() {
         }
         return job_;
     }
-    return ready_job_;
+    return job_;
 }
 
 void TimerSource::stop() { stopped_ = true; }

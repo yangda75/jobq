@@ -23,7 +23,6 @@ class TimerSource final : public Source {
   private:
     int timeout_ms_{};
     Mode mode_{};
-    std::optional<Job> ready_job_{};
     std::atomic_bool stopped_{};
     std::chrono::steady_clock::time_point start_time_{};
     Job job_{};
