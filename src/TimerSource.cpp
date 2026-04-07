@@ -35,7 +35,7 @@ bool TimerSource::isReady() {
     auto deltat = std::chrono::steady_clock::now() - start_time_;
     auto millis =
         std::chrono::duration_cast<std::chrono::milliseconds>(deltat).count();
-    return millis > timeout_ms_;
+    return millis >= timeout_ms_;
 }
 
 bool TimerSource::isFinished() { return finished_ || stopped_; }
