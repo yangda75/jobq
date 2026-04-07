@@ -9,7 +9,6 @@
 
 namespace jobq {
 
-constexpr auto WORKER_THREADS_PER_EXECUTOR = 1;
 
 struct Executor::Impl {
     Q q{};
@@ -19,6 +18,8 @@ struct Executor::Impl {
     std::mutex m{}; // guards access to workers vector, not worker_threads
     std::thread dispatcher{};
     std::atomic_bool stopped{false};
+    size_t nthreads{};
+    explicit Impl(size_t num_threads = 1) : nthreads{num_threads} {}
     void fetchAndDispatch() {
         while (!stopped) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -52,9 +53,9 @@ struct Executor::Impl {
     void run() {
         {
             std::lock_guard lk{m};
-            workers.reserve(WORKER_THREADS_PER_EXECUTOR);
+            workers.reserve(nthreads);
             // start worker threads
-            for (int i = 0; i < WORKER_THREADS_PER_EXECUTOR; i++) {
+            for (int i = 0; i < nthreads; i++) {
                 workers.emplace_back(q);
                 worker_threads.emplace_back(std::thread{[this, i]() {
                     auto &w = workers[i];
@@ -108,10 +109,13 @@ struct Executor::Impl {
 
 /// api
 
-Executor::Executor() : impl_{std::make_unique<Impl>()} {}
+Executor::Executor(size_t num_threads)
+    : impl_{std::make_unique<Impl>(num_threads)} {}
 Executor::~Executor() = default;
 
-void Executor::registerSource(std::shared_ptr<Source> src) { impl_->registerSource(src); }
+void Executor::registerSource(std::shared_ptr<Source> src) {
+    impl_->registerSource(src);
+}
 
 void Executor::run() { impl_->run(); }
 

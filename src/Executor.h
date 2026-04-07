@@ -17,7 +17,7 @@ class Executor {
     // stop accepting new task, and drain remaining tasks
     void shutdownAndDrain();
 
-    Executor();
+    explicit Executor(size_t num_threads = 1);
     ~Executor();
 
   private:
