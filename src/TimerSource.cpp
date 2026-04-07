@@ -9,7 +9,7 @@ TimerSource::TimerSource(Mode mode, int timeout_ms, Job job)
 }
 
 std::optional<Job> TimerSource::takeJob() {
-    if (stopped_) {
+    if (stopped_ || finished_) {
         return std::nullopt;
     }
     // isReady should be true here
