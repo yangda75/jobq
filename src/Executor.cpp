@@ -21,7 +21,7 @@ struct Executor::Impl {
     explicit Impl(size_t num_threads = 1) : nthreads{num_threads} {}
     void fetchAndDispatch() {
         while (!stopped) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
             auto all_finished = true;
             auto sources_copy = decltype(sources){};
             {
@@ -29,16 +29,12 @@ struct Executor::Impl {
                 sources_copy = sources;
             }
             for (auto &src : sources_copy) {
-                loginfo("checking src: {}", src->id());
                 if (src->isFinished()) {
-                    loginfo("src: {} finished", src->id());
                     continue;
                 }
                 all_finished = false;
                 if (src->isReady()) {
-                    loginfo("src: {} ready", src->id());
                     if (auto job = src->takeJob()) {
-                        loginfo("src: {} got job", src->id());
                         submitJob(*job);
                     }
                 }
@@ -104,7 +100,6 @@ struct Executor::Impl {
 
     void registerSource(std::shared_ptr<Source> src) {
         std::lock_guard lk{m};
-        loginfo("register source : {}", src->id());
         sources.push_back(src);
     }
 };
