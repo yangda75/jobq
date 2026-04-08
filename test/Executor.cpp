@@ -1,7 +1,9 @@
 #include "Executor.h"
 #include "Log.h"
 #include "ManualSource.h"
+#include "Source.h"
 #include "TimerSource.h"
+#include "Utils.h"
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
@@ -271,4 +273,75 @@ TEST_CASE("shutdown stops timer source") {
 
     th.join();
     REQUIRE(callback_cnt == current_callback_cnt);
+}
+
+TEST_CASE("one shot timer is exactly once") {
+    jobq::Executor ex{};
+    std::atomic_int callback_cnt{};
+    std::shared_ptr<jobq::Source> src = std::make_shared<jobq::TimerSource>(
+        jobq::TimerSource::Mode::ONE_SHOT, 5,
+        [&callback_cnt]() { callback_cnt++; });
+
+    ex.registerSource(src);
+    auto th = jobq::runExecutor(ex);
+    using namespace std::chrono_literals;
+    std::this_thread::sleep_for(100ms);
+    REQUIRE(callback_cnt == 1);
+    ex.shutdownAndDrain();
+    th.join();
+    REQUIRE(callback_cnt == 1);
+}
+
+TEST_CASE("multiple concurrent one shot timers") {
+    jobq::Executor ex{};
+    std::deque<std::atomic_int> callback_cnt_vec{};
+    constexpr int TIMER_CNT = 10;
+    for (int i = 0; i < TIMER_CNT; i++) {
+        callback_cnt_vec.emplace_back(
+            0); // deque push back is construction in place
+    }
+    for (int i = 0; i < TIMER_CNT; i++) {
+        jobq::SharedSourcePtr src = std::make_shared<jobq::TimerSource>(
+            jobq::TimerSource::Mode::ONE_SHOT, 5,
+            [&callback_cnt_vec, i]() { callback_cnt_vec[i]++; });
+        ex.registerSource(src);
+    }
+    auto th = jobq::runExecutor(ex);
+    using namespace std::chrono_literals;
+    std::this_thread::sleep_for(20ms);
+    for (size_t i = 0; i < TIMER_CNT; ++i) {
+        REQUIRE(callback_cnt_vec[i] == 1);
+    }
+    ex.shutdownAndDrain();
+    th.join();
+    for (size_t i = 0; i < TIMER_CNT; ++i) {
+        REQUIRE(callback_cnt_vec[i] == 1);
+    }
+}
+
+TEST_CASE("multiple concurrent repeating timers") {
+    jobq::Executor ex{};
+    std::deque<std::atomic_int> callback_cnt_vec{};
+    constexpr int TIMER_CNT = 10;
+    for (int i = 0; i < TIMER_CNT; i++) {
+        callback_cnt_vec.emplace_back(
+            0); // deque push back is construction in place
+    }
+    for (int i = 0; i < TIMER_CNT; i++) {
+        jobq::SharedSourcePtr src = std::make_shared<jobq::TimerSource>(
+            jobq::TimerSource::Mode::REPEATING, 5,
+            [&callback_cnt_vec, i]() { callback_cnt_vec[i]++; });
+        ex.registerSource(src);
+    }
+    auto th = jobq::runExecutor(ex);
+    using namespace std::chrono_literals;
+    std::this_thread::sleep_for(20ms);
+    for (size_t i = 0; i < TIMER_CNT; ++i) {
+        REQUIRE(callback_cnt_vec[i] > 1);
+    }
+    ex.shutdownAndDrain();
+    th.join();
+    for (size_t i = 0; i < TIMER_CNT; ++i) {
+        REQUIRE(callback_cnt_vec[i] > 1);
+    }
 }

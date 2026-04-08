@@ -18,4 +18,6 @@ class Source {
     std::string id_{};
 };
 
+using SharedSourcePtr = std::shared_ptr<Source>;
+
 } // namespace jobq

@@ -9,7 +9,6 @@
 
 namespace jobq {
 
-
 struct Executor::Impl {
     Q q{};
     std::vector<std::thread> worker_threads{};
@@ -90,6 +89,9 @@ struct Executor::Impl {
         stopped = true;
         {
             std::lock_guard lk{m};
+            for (auto src : sources) {
+                src->stop();
+            }
             for (auto &w : workers) {
                 w.stop();
             }

@@ -26,8 +26,8 @@ add_library(jobq_jobq)
 add_library(jobq::jobq ALIAS jobq_jobq)
 target_sources(
   jobq_jobq
-  PRIVATE src/JobQ.cpp src/Worker.cpp src/Executor.cpp src/TimerSource.cpp
-          src/ManualSource.cpp
+  PRIVATE src/JobQ.cpp src/Worker.cpp src/Executor.cpp src/TimerSource.cpp 
+          src/ManualSource.cpp src/Utils.cpp
   PUBLIC FILE_SET
          HEADERS
          BASE_DIRS
@@ -39,7 +39,9 @@ target_sources(
          src/Executor.h
          src/TimerSource.h
          src/Source.h
-         src/ManualSource.h)
+         src/ManualSource.h
+         src/Utils.h
+       )
 target_link_libraries(jobq_jobq PUBLIC spdlog::spdlog)
 
 if(JOBQ_ENABLE_TSAN)
