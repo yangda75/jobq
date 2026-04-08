@@ -13,6 +13,9 @@ std::optional<Job> TimerSource::takeJob() {
     if (stopped_ || finished_) {
         return std::nullopt;
     }
+    if (mode_ == Mode::ONE_SHOT) {
+        finished_ = true;
+    }
     return job_;
 }
 
@@ -53,7 +56,6 @@ void TimerSource::timerLoop() {
         }
         ready_callback_();
         if (mode_ == Mode::ONE_SHOT) {
-            finished_ = true;
             break;
         }
     }
