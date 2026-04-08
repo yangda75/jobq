@@ -6,7 +6,15 @@ namespace jobq {
 /// 任务来源
 class Source {
   public:
+    std::optional<Job> tryTakeJob() {
+        if (!isReady()) {
+            return std::nullopt;
+        }
+        return takeJob();
+    }
+
     explicit Source(std::string id) : id_{std::move(id)} {}
+
     virtual std::string id() const { return id_; }
     virtual bool isReady() = 0;
     virtual std::optional<Job> takeJob() = 0;

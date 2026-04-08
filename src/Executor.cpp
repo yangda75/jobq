@@ -33,10 +33,8 @@ struct Executor::Impl {
                     continue;
                 }
                 all_finished = false;
-                if (src->isReady()) {
-                    if (auto job = src->takeJob()) {
-                        submitJob(*job);
-                    }
+                if (auto job = src->tryTakeJob()) {
+                    submitJob(*job);
                 }
             }
             if (all_finished) {
