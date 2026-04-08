@@ -31,7 +31,11 @@ bool TimerSource::isReady() {
 
 bool TimerSource::isFinished() { return finished_ || stopped_; }
 
-TimerSource::~TimerSource() = default;
+TimerSource::~TimerSource() {
+    if (!stopped_) {
+        stop();
+    }
+}
 
 void TimerSource::setReadyCallback(std::function<void()> cb) {
     Source::setReadyCallback(cb);

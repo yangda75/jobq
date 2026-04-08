@@ -3,7 +3,6 @@
 #include "Log.h"
 #include "Source.h"
 #include "Worker.h"
-#include <chrono>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -13,7 +12,6 @@ namespace jobq {
 struct Executor::Impl {
     Q q{};
     std::vector<std::thread> worker_threads{};
-    std::vector<std::shared_ptr<Source>> sources{};
     std::vector<Worker> workers{};
     std::mutex m{}; // guards access to workers vector, not worker_threads
     std::thread dispatcher{};
@@ -21,26 +19,31 @@ struct Executor::Impl {
     size_t nthreads{};
     std::mutex source_mtx{};
     std::condition_variable source_cv{};
+
     std::deque<SharedSourcePtr> ready_sources{};
+    std::vector<std::shared_ptr<Source>> sources{};
 
     explicit Impl(size_t num_threads = 1) : nthreads{num_threads} {}
     void fetchAndDispatch() {
-        std::unique_lock uniqlock{source_mtx};
-        source_cv.wait(uniqlock,
-                       [this]() { return !ready_sources.empty() || stopped; });
-        if (stopped) {
-            loginfo("fetchAndDispatch done, stopped");
-            return;
-        }
-        // drain ready sources
-        while (!ready_sources.empty()) {
-            auto src = ready_sources.front();
-            ready_sources.pop_front();
-            auto job = src->takeJob();
-            if (!job) {
-                continue;
+        while (true) {
+            std::unique_lock uniqlock{source_mtx};
+            source_cv.wait(uniqlock, [this]() {
+                return !ready_sources.empty() || stopped;
+            });
+            if (stopped) {
+                loginfo("fetchAndDispatch done, stopped");
+                return;
             }
-            q.pushJob(*job);
+            // drain ready sources
+            while (!ready_sources.empty()) {
+                auto src = ready_sources.front();
+                ready_sources.pop_front();
+                auto job = src->takeJob();
+                if (!job) {
+                    continue;
+                }
+                q.pushJob(*job);
+            }
         }
         loginfo("fetchAndDispatch done");
     }
@@ -105,7 +108,17 @@ struct Executor::Impl {
             ready_sources.push_back(src);
             source_cv.notify_one();
         });
-        sources.push_back(src);
+        sources.push_back(std::move(src));
+    }
+
+    void prepareForDestruction() {
+        // stop all sources
+        if (!stopped) {
+            shutdown();
+        }
+        if (dispatcher.joinable()) {
+            dispatcher.join();
+        }
     }
 };
 
@@ -113,7 +126,8 @@ struct Executor::Impl {
 
 Executor::Executor(size_t num_threads)
     : impl_{std::make_unique<Impl>(num_threads)} {}
-Executor::~Executor() = default;
+
+Executor::~Executor() { impl_->prepareForDestruction(); };
 
 void Executor::registerSource(std::shared_ptr<Source> src) {
     impl_->registerSource(src);

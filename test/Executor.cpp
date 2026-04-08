@@ -6,6 +6,7 @@
 #include "Utils.h"
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
 #include <memory>
 #include <thread>
 
