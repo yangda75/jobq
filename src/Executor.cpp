@@ -1,6 +1,7 @@
 #include "Executor.h"
 #include "JobQ.h"
 #include "Log.h"
+#include "Source.h"
 #include "Worker.h"
 #include <chrono>
 #include <mutex>
@@ -18,28 +19,28 @@ struct Executor::Impl {
     std::thread dispatcher{};
     std::atomic_bool stopped{false};
     size_t nthreads{};
+    std::mutex source_mtx{};
+    std::condition_variable source_cv{};
+    std::deque<SharedSourcePtr> ready_sources{};
+
     explicit Impl(size_t num_threads = 1) : nthreads{num_threads} {}
     void fetchAndDispatch() {
-        while (!stopped) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            auto all_finished = true;
-            auto sources_copy = decltype(sources){};
-            {
-                std::lock_guard lk{m};
-                sources_copy = sources;
+        std::unique_lock uniqlock{source_mtx};
+        source_cv.wait(uniqlock,
+                       [this]() { return !ready_sources.empty() || stopped; });
+        if (stopped) {
+            loginfo("fetchAndDispatch done, stopped");
+            return;
+        }
+        // drain ready sources
+        while (!ready_sources.empty()) {
+            auto src = ready_sources.front();
+            ready_sources.pop_front();
+            auto job = src->takeJob();
+            if (!job) {
+                continue;
             }
-            for (auto &src : sources_copy) {
-                if (src->isFinished()) {
-                    continue;
-                }
-                all_finished = false;
-                if (auto job = src->tryTakeJob()) {
-                    submitJob(*job);
-                }
-            }
-            if (all_finished) {
-                break;
-            }
+            q.pushJob(*job);
         }
         loginfo("fetchAndDispatch done");
     }
@@ -66,6 +67,7 @@ struct Executor::Impl {
     void shutdownAndDrain() {
         q.close();
         stopped = true;
+        source_cv.notify_all();
         // shutdown all sources
         std::lock_guard lk{m};
         for (auto src : sources) {
@@ -80,6 +82,7 @@ struct Executor::Impl {
     void shutdown() {
         q.close();
         stopped = true;
+        source_cv.notify_all();
         {
             std::lock_guard lk{m};
             for (auto src : sources) {
@@ -97,6 +100,11 @@ struct Executor::Impl {
 
     void registerSource(std::shared_ptr<Source> src) {
         std::lock_guard lk{m};
+        src->setReadyCallback([this, src]() {
+            std::lock_guard lk{source_mtx};
+            ready_sources.push_back(src);
+            source_cv.notify_one();
+        });
         sources.push_back(src);
     }
 };

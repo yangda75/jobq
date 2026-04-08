@@ -1,5 +1,6 @@
 #include "TimerSource.h"
 #include <chrono>
+#include <thread>
 
 namespace jobq {
 
@@ -12,24 +13,14 @@ std::optional<Job> TimerSource::takeJob() {
     if (stopped_ || finished_) {
         return std::nullopt;
     }
-    // isReady should be true here
-    switch (mode_) {
-    case Mode::ONE_SHOT: {
-        finished_ = true;
-        break;
-    }
-    case Mode::REPEATING: {
-        // reset start time
-        start_time_ = std::chrono::steady_clock::now();
-        break;
-    }
-    default:
-        break;
-    }
     return job_;
 }
 
-void TimerSource::stop() { stopped_ = true; }
+void TimerSource::stop() {
+    stopped_ = true;
+    cv_.notify_all();
+    timer_thread_.join();
+}
 
 bool TimerSource::isReady() {
     auto deltat = std::chrono::steady_clock::now() - start_time_;
@@ -41,5 +32,27 @@ bool TimerSource::isReady() {
 bool TimerSource::isFinished() { return finished_ || stopped_; }
 
 TimerSource::~TimerSource() = default;
+
+void TimerSource::setReadyCallback(std::function<void()> cb) {
+    Source::setReadyCallback(cb);
+    timer_thread_ = std::thread{[this]() { timerLoop(); }};
+}
+
+void TimerSource::timerLoop() {
+    while (!stopped_) {
+        std::unique_lock uniqlock{mtx_};
+
+        cv_.wait_for(uniqlock, std::chrono::milliseconds(timeout_ms_),
+                     [this]() { return stopped_.load(); });
+        if (stopped_) {
+            break;
+        }
+        ready_callback_();
+        if (mode_ == Mode::ONE_SHOT) {
+            finished_ = true;
+            break;
+        }
+    }
+}
 
 } // namespace jobq

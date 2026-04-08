@@ -1,10 +1,8 @@
 #include "JobQ.h"
 #include <chrono>
 #include <condition_variable>
-#include "Log.h"
 #include <list>
 #include <mutex>
-#include <thread>
 
 namespace jobq {
 

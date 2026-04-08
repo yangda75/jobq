@@ -13,6 +13,10 @@ class Source {
         return takeJob();
     }
 
+    virtual void setReadyCallback(std::function<void()> cb) {
+        ready_callback_ = cb;
+    }
+
     explicit Source(std::string id) : id_{std::move(id)} {}
 
     virtual std::string id() const { return id_; }
@@ -21,6 +25,9 @@ class Source {
     virtual bool isFinished() = 0;
     virtual void stop() = 0;
     virtual ~Source() = default;
+
+  protected:
+    std::function<void()> ready_callback_{};
 
   private:
     std::string id_{};
