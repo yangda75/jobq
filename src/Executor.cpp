@@ -34,15 +34,25 @@ struct Executor::Impl {
                 loginfo("fetchAndDispatch done, stopped");
                 return;
             }
-            // drain ready sources
-            while (!ready_sources.empty()) {
-                auto src = ready_sources.front();
-                ready_sources.pop_front();
-                auto job = src->takeJob();
-                if (!job) {
-                    continue;
+            loginfo("fetchAndDispatch wakeup, number of ready srcs: {}",
+                    ready_sources.size());
+            auto src = ready_sources.front();
+            ready_sources.pop_front();
+            uniqlock.unlock();
+
+            auto job = src->takeJob();
+            if (!job) {
+                loginfo("fetchAndDispatch got no job");
+                continue;
+            }
+            q.pushJob(*job);
+
+            auto all_source_finished = true;
+            for (auto const &src : sources) {
+                if (!src->isFinished()) {
+                    all_source_finished = false;
+                    break;
                 }
-                q.pushJob(*job);
             }
         }
         loginfo("fetchAndDispatch done");
