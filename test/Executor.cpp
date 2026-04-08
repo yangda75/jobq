@@ -1,8 +1,8 @@
 #include "Executor.h"
 #include "Log.h"
-#include "ManualSource.h"
 #include "Source.h"
 #include "TimerSource.h"
+#include "TriggerSource.h"
 #include "Utils.h"
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
@@ -229,22 +229,24 @@ TEST_CASE("repeating timer source working") {
     REQUIRE(num_job_done > 1);
 }
 
-TEST_CASE("registerSource compiles with ManualSource") {
+TEST_CASE("registerSource compiles with TriggerSource") {
     jobq::Executor ex{};
-    std::shared_ptr<jobq::Source> src = std::make_shared<jobq::ManualSource>(
-        "test", []() { jobq::loginfo("manual"); });
+    std::shared_ptr<jobq::Source> src = std::make_shared<jobq::TriggerSource>(
+        "test", []() { jobq::loginfo("trigger"); });
     ex.registerSource(src);
 }
 
-TEST_CASE("manual source working") {
+TEST_CASE("trigger source working") {
     jobq::Executor ex{};
     std::atomic_bool job_done{false};
-    std::shared_ptr<jobq::Source> src = std::make_shared<jobq::ManualSource>(
+    auto trigger_src = std::make_shared<jobq::TriggerSource>(
         "test", [&job_done]() { job_done = true; });
 
+    std::shared_ptr<jobq::Source> src = trigger_src;
     ex.registerSource(src);
 
     std::thread th{[&ex]() { ex.run(); }};
+    trigger_src->trigger();
     using namespace std::chrono_literals;
     std::this_thread::sleep_for(20ms);
     ex.shutdownAndDrain();

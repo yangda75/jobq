@@ -4,15 +4,17 @@
 
 namespace jobq {
 
-class ManualSource final : public Source {
+class TriggerSource final : public Source {
   public:
-    ManualSource(std::string id, Job job);
+    TriggerSource(std::string id, Job job);
     bool isReady() override;
     std::optional<Job> takeJob() override;
     bool isFinished() override;
     void stop() override;
 
-    ~ManualSource() = default;
+    void trigger();
+
+    ~TriggerSource() = default;
 
   private:
     Job job_;
