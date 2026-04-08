@@ -50,10 +50,9 @@ struct Executor::Impl {
             // start worker threads
             for (int i = 0; i < nthreads; i++) {
                 workers.emplace_back(q);
-                worker_threads.emplace_back(std::thread{[this, i]() {
-                    auto &w = workers[i];
-                    w.runForever();
-                }});
+                auto &worker_i = workers[i];
+                worker_threads.emplace_back(
+                    std::thread{[&worker_i]() { worker_i.runForever(); }});
             }
         }
         // start dispatcher
