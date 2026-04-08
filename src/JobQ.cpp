@@ -29,7 +29,7 @@ struct Q::Impl {
         if (jobs.empty()) {
             return std::nullopt;
         }
-        auto job = jobs.front(); // is this copy ok?
+        auto job = std::move(jobs.front()); // is this copy ok?
         jobs.pop_front();
         return job;
     }
@@ -43,7 +43,7 @@ struct Q::Impl {
         if (closed && jobs.empty()) {
             return std::nullopt;
         }
-        auto job = jobs.front();
+        auto job = std::move(jobs.front());
         jobs.pop_front();
         return job;
     }
