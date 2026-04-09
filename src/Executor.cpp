@@ -3,11 +3,11 @@
 #include "Log.h"
 #include "Source.h"
 #include "Worker.h"
+#include <condition_variable>
+#include <deque>
 #include <mutex>
 #include <thread>
 #include <vector>
-#include <condition_variable>
-#include <deque>
 
 namespace jobq {
 
@@ -38,17 +38,18 @@ struct Executor::Impl {
             }
             loginfo("fetchAndDispatch wakeup, number of ready srcs: {}",
                     ready_sources.size());
-            auto src = ready_sources.front();
-            ready_sources.pop_front();
-            uniqlock.unlock();
+            while (!ready_sources.empty()) {
+                auto src = ready_sources.front();
+                ready_sources.pop_front();
 
-            auto job = src->takeJob();
-            if (!job) {
-                loginfo("fetchAndDispatch got no job");
-                continue;
+                auto job = src->takeJob();
+                if (!job) {
+                    loginfo("fetchAndDispatch got no job");
+                    continue;
+                }
+                q.pushJob(*job);
             }
-            q.pushJob(*job);
-
+            uniqlock.unlock();
             auto all_source_finished = true;
             for (auto const &src : sources) {
                 if (!src->isFinished()) {
