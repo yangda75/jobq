@@ -2,7 +2,8 @@
 
 namespace jobq {
 
-TriggerSource::TriggerSource(std::string id, Job job) : Source{id}, job_{job} {}
+TriggerSource::TriggerSource(std::string id, Job job)
+    : Source{std::move(id)}, job_{job} {}
 
 bool TriggerSource::isReady() { return true; }
 
