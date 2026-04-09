@@ -1,7 +1,8 @@
 # jobq
 
+[![CI](https://github.com/yangda75/jobq/actions/workflows/ci.yml/badge.svg)](https://github.com/yangda75/jobq/actions/workflows/ci.yml)
 
-## 架构图
+## 结构
 
 ```mermaid
 flowchart LR
