@@ -14,7 +14,7 @@ class TimerSource final : public Source {
         REPEATING,
     };
 
-    TimerSource(Mode mode, int timeout_ms, Job job);
+    TimerSource(Mode mode, int timeout_ms, JobFn f);
 
     bool isReady() override;
     std::optional<Job> takeJob() override;
@@ -31,7 +31,7 @@ class TimerSource final : public Source {
     Mode mode_{};
     std::atomic_bool stopped_{};
     std::chrono::steady_clock::time_point start_time_{};
-    Job job_{};
+    Job job_{}; // job id is determined in executor
     std::atomic_bool finished_{};
     std::thread timer_thread_{};
     std::mutex mtx_{};

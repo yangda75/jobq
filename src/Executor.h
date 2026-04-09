@@ -16,7 +16,7 @@ struct Stats {
 class Executor {
   public:
     void registerSource(std::shared_ptr<Source>);
-    bool submitJob(Job j);
+    bool submitJob(JobFn j);
     // like spin, one-shot, blocking
     void run();
     // stop accepting new task, finish current task, and discard remaining tasks

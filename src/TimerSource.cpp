@@ -4,9 +4,9 @@
 
 namespace jobq {
 
-TimerSource::TimerSource(Mode mode, int timeout_ms, Job job)
-    : Source{"TimerSource"}, mode_{mode}, timeout_ms_{timeout_ms}, job_{job},
-      start_time_{std::chrono::steady_clock::now()} {}
+TimerSource::TimerSource(Mode mode, int timeout_ms, JobFn job)
+    : Source{"TimerSource"}, mode_{mode}, timeout_ms_{timeout_ms},
+      job_{.fn = job}, start_time_{std::chrono::steady_clock::now()} {}
 
 std::optional<Job> TimerSource::takeJob() {
     if (stopped_ || finished_) {

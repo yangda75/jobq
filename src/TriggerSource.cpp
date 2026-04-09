@@ -2,8 +2,8 @@
 
 namespace jobq {
 
-TriggerSource::TriggerSource(std::string id, Job job)
-    : Source{std::move(id)}, job_{job} {}
+TriggerSource::TriggerSource(std::string id, JobFn f)
+    : Source{std::move(id)}, job_{.fn = f} {}
 
 bool TriggerSource::isReady() { return true; }
 
@@ -14,6 +14,7 @@ std::optional<Job> TriggerSource::takeJob() {
     finished_ = true;
     return job_;
 }
+
 bool TriggerSource::isFinished() { return finished_; }
 void TriggerSource::stop() { stopped_ = true; }
 

@@ -19,7 +19,7 @@ struct Worker::Impl {
                 if (!job.has_value()) {
                     break;
                 }
-                (*job)();
+                (job->fn)();
                 if (counter) {
                     (*counter)++;
                 }
@@ -43,7 +43,7 @@ struct Worker::Impl {
                 break;
             }
             try {
-                (*job)();
+                (job->fn)();
                 if (counter) {
                     (*counter)++;
                 }

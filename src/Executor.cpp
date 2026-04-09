@@ -12,6 +12,7 @@
 namespace jobq {
 
 struct Executor::Impl {
+    std::atomic_uint64_t jid{};
     std::atomic_int jobs_submitted{};
     std::atomic_int jobs_executed{};
     std::atomic_int jobs_discarded{};
@@ -51,6 +52,7 @@ struct Executor::Impl {
                     loginfo("fetchAndDispatch got no job");
                     continue;
                 }
+                job->id = ++jid; // set id here, make it easy
                 jobs_submitted++;
                 q.pushJob(*job);
             }
@@ -99,8 +101,13 @@ struct Executor::Impl {
         // runForever 会执行完剩下的任务
     }
 
-    bool submitJob(Job j) {
+    bool submitJob(JobFn f) {
         jobs_submitted++;
+        // atomic_counter for job id
+        // build job
+        Job j{};
+        j.fn = f;
+        j.id = ++jid;
         return q.pushJob(j);
     }
 
@@ -169,7 +176,7 @@ void Executor::registerSource(std::shared_ptr<Source> src) {
 
 void Executor::run() { impl_->run(); }
 
-bool Executor::submitJob(Job j) { return impl_->submitJob(j); }
+bool Executor::submitJob(JobFn j) { return impl_->submitJob(j); }
 
 void Executor::shutdown() { impl_->shutdown(); }
 
