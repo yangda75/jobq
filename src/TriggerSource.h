@@ -19,7 +19,7 @@ class TriggerSource final : public Source {
 
   private:
     Job job_;
-    std::atomic_bool finished_;
-    std::atomic_bool stopped_;
+    std::atomic_bool finished_{false};
+    std::atomic_bool stopped_{false};
 };
 } // namespace jobq
