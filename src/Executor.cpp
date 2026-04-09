@@ -53,8 +53,9 @@ struct Executor::Impl {
                     continue;
                 }
                 job->id = ++jid; // set id here, make it easy
-                jobs_submitted++;
-                q.pushJob(*job);
+                if (q.pushJob(*job)) {
+                    jobs_submitted++;
+                }
             }
             uniqlock.unlock();
             auto all_source_finished = true;
