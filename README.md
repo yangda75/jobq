@@ -5,13 +5,12 @@
 
 ```mermaid
 flowchart LR
-    T1[TimerSource A]
-    T2[TimerSource B]
-    M1[ManualSource]
+    TS[TimerSource]
+    GS[TriggerSource]
 
     subgraph EX[Executor]
-        D[Dispatcher / Polling Loop]
-        IQ[Internal Job Queue]
+        D[Dispatcher]
+        IQ[Internal Queue]
     end
 
     subgraph WK[Workers]
@@ -20,19 +19,46 @@ flowchart LR
         WN[Worker N]
     end
 
-    T1 -->|isReady / takeJob| D
-    T2 -->|isReady / takeJob| D
-    M1 -->|isReady / takeJob| D
-    D -->|submit ready jobs| IQ
+    TS -->|ready callback| D
+    GS -->|ready callback| D
+    D -->|takeJob + pushJob| IQ
     IQ --> W1
     IQ --> W2
     IQ --> WN
 ```
 
-- source 不直接执行回调
-- worker 不直接感知 source
-- executor 是中间层，负责“观察 source + 调度 ready job + 管理生命周期”
+职责分工：
 
+- `Source` 不直接执行回调
+- `Executor` 接收 source 的 ready 通知，并把 job 放入内部队列
+- `Worker` 只关心从队列取任务并执行
+
+这种划分让系统具备更清晰的扩展边界：
+
+- 新增 source 类型时，不必改 worker
+- 调整调度逻辑时，不必改具体 job 执行方式
+- 关闭语义可以统一由 executor 定义
+
+## 公开 API 概览
+
+| 组件 | 作用 | 关键接口 |
+|---|---|---|
+| `jobq::Q` | 线程安全任务队列 | `pushJob`, `popOne`, `popOneFor`, `close` |
+| `jobq::Worker` | 消费队列并执行任务 | `runUntilEmpty`, `runForever`, `stop` |
+| `jobq::Executor` | 注册 source、接收任务并调度执行 | `registerSource`, `submitJob`, `run`, `shutdown`, `shutdownAndDrain` |
+| `jobq::TimerSource` | 定时产生任务 | `Mode::ONE_SHOT`, `Mode::REPEATING` |
+| `jobq::TriggerSource` | 外部显式触发任务 | `trigger` |
+| `jobq::runExecutor` | 在后台线程启动 executor | `runExecutor(Executor&)` |
+
+## 任务如何流动
+
+一次典型执行路径如下：
+
+1. `Source` 进入 ready 状态
+2. `Source` 通过 ready callback 通知 `Executor`
+3. `Executor` 的 dispatcher 取出 source，并调用 `takeJob()`
+4. job 被推入内部 `Q`
+5. `Worker` 从队列中取出 job 并执行
 
 
 ## jobq::Q 
@@ -77,7 +103,15 @@ stateDiagram
 不会抛出异常
 
 ## jobq::Worker
-执行任务的“工作者”
+`Worker` 负责从 `Q` 中取任务并执行。
+
+公开行为：
+
+- `runUntilEmpty()`：持续执行，直到队列为空且无法继续取到任务
+- `runForever()`：持续执行，直到被停止或队列关闭
+- `stop()`：请求停止，不再继续处理新任务
+
+`Worker` 不感知 source，也不负责调度，只负责消费队列。
 
 ### 生命周期
 ```mermaid
@@ -102,180 +136,200 @@ stateDiagram
 ## jobq::Source
 任务源，用于发布任务，比如定时任务、手动任务等。
 
-### Timer 回调生命周期
+### TimerSource
 
-以 `TimerSource` 为例，一次回调从“未到期”到“执行完成”的过程如下：
+`TimerSource` 用于周期性或一次性地产生任务。
+
+支持两种模式：
+
+- `Mode::ONE_SHOT`
+- `Mode::REPEATING`
+
+行为：
+
+- `ONE_SHOT`：到期后触发一次，随后结束
+- `REPEATING`：按固定间隔重复触发，直到 `stop()` 或 executor 关闭
+
+一次 timer callback 的流转可以概括为：
 
 ```mermaid
 sequenceDiagram
     participant TS as TimerSource
-    participant EX as Executor Dispatcher
+    participant EX as Executor
     participant Q as Internal Queue
     participant WK as Worker
 
-    EX->>TS: 轮询 isReady()
-    TS-->>EX: false
-    EX->>TS: 再次轮询 isReady()
-    TS-->>EX: true
+    TS->>EX: ready callback
     EX->>TS: takeJob()
-    TS-->>EX: optional<Job>
+    TS-->>EX: Job
     EX->>Q: pushJob(job)
     WK->>Q: popOne()
     Q-->>WK: job
-    WK->>WK: 执行 callback
+    WK->>WK: execute
 ```
-
-对 `TimerSource` 来说，细节差异如下：
-#### one-shot timer
-
-1. 创建时记录起始时间
-2. 在到期前，`isReady()` 返回 `false`
-3. 到期后，`isReady()` 返回 `true`
-4. executor 调用 `takeJob()`
-5. source 返回一个 job，并把自己标记为 finished
-6. 后续 executor 不再需要调度这个 source
-
-#### repeating timer
-
-1. 创建时记录起始时间
-2. 到期后，executor 调用 `takeJob()`
-3. source 返回一个 job
-4. source 把下一轮计时起点重置为“当前时刻”
-5. executor 继续在后续轮询里观察它
-6. 直到 `stop()` 或系统关闭为止
 
 
 ## jobq::Executor
-执行器，从任务源拉取任务，加入队列中，给执行者来做。
+`Executor` 是系统的调度核心。
 
-- 持有注册进来的 sources
-- 轮询每个 source 是否 ready
-- 把 ready callback 转成内部 job，推入队列
-- 管理 worker 线程
-- 定义 shutdown / drain 的确语义
+它负责：
 
-构造时可以配置 worker 数量，默认是 `1`。
+- 持有注册进来的 source
+- 接收 source 的 ready 通知
+- 从 source 中取出 job
+- 把 job 推入内部队列
+- 启动和管理 worker 线程
+- 定义关闭语义
 
-调用 `run` 的线程作为“管家”线程，启动一组工作线程，和一个任务拉取线程。
-调用`shutdown`，不再接受新任务，完成当前正在执行任务后，丢弃所有未完成任务；调用`shutdownAndDrain`后，不再接受新任务，完成已在队列中的所有任务。
+构造函数支持 worker 数量配置：
 
-### run
-`Executor::run()` 的角色不是“执行一个函数”，而是启动整个执行系统。
+```cpp
+jobq::Executor ex{1};
+jobq::Executor ex2{4};
+```
 
-运行后会存在三类活动实体：
+### 直接提交任务
 
-- 调用 `run()` 的线程：负责启动与等待整个执行系统结束
-- dispatcher 线程：轮询 sources，把 ready job 推入内部队列
-- worker 线程：从内部队列取任务并执行
+除了 source 驱动，当前 executor 也保留了直接注入任务的路径：
 
-从职责分工上看：
+```cpp
+ex.submitJob([]() {
+    // do work
+});
+```
 
-- dispatcher 决定“什么可以执行”
-- queue 负责“怎样安全交接任务”
-- workers 决定“谁来实际执行”
+这适合测试、过渡性使用，或者把 executor 当成一个带关闭语义的执行容器。
 
-这让系统具备比较清晰的扩展方向：
+### `run()`
 
-- 未来可以增加新的 source 类型，而不必改 worker
-- 未来可以替换 polling 机制，而不必改任务执行语义
-- 未来可以增加 pub/sub、fd event、subscription callback，而不必重写整个 executor
+`run()` 会启动整个执行系统，并阻塞当前线程直到 executor 结束。
 
+运行期间会存在三类活动实体：
 
+- 调用 `run()` 的线程：等待整个系统结束
+- dispatcher 线程：等待 ready source，并将其转换为 job
+- worker 线程：从内部队列中取任务并执行
 
+如果希望在后台运行，可以使用：
+
+```cpp
+auto th = jobq::runExecutor(ex);
+```
+
+## 关闭语义
+
+`Executor` 明确区分两种关闭方式。
 
 ### `shutdown()`
 
 语义目标：
 
 - 不再接受新任务
-- 停止 sources 继续产出新回调
-- 正在执行的回调允许跑完
-- 已经在队列里、但尚未开始执行的任务会被丢弃
+- 停止 source 继续产生新任务
+- 正在执行中的任务允许结束
+- 已经入队但尚未开始执行的任务会被丢弃
 
 适用场景：
 
 - 需要尽快停机
-- 不要求把 backlog 全部跑完
-- 更关注快速收敛而不是完整处理剩余任务
-
-示意：
-
-```mermaid
-flowchart TD
-    A[调用 shutdown] --> B[停止接收新任务]
-    B --> C[停止 source]
-    C --> D[允许当前正在运行的任务结束]
-    D --> E[丢弃队列中未开始执行的任务]
-    E --> F[Executor 退出]
-```
+- backlog 不要求全部处理完成
 
 ### `shutdownAndDrain()`
 
 语义目标：
 
 - 不再接受新任务
-- 停止 sources 继续产出新回调
-- 已经进入内部队列的任务继续执行直到清空
-- 然后 worker 退出，executor 结束
+- 停止 source 继续产生新任务
+- 已经进入内部队列的任务会继续执行直到队列清空
 
 适用场景：
 
-- 需要“有序关闭”
-- 已经 ready 的回调不希望丢失
-- 更关注处理完整性而不是最短停机时间
+- 需要有序关闭
+- 不希望丢掉已经 ready 的任务
 
-示意：
+### 对比
 
-```mermaid
-flowchart TD
-    A[调用 shutdownAndDrain] --> B[停止接收新任务]
-    B --> C[停止 source]
-    C --> D[保留队列中已 ready 的任务]
-    D --> E[worker 持续执行直到队列清空]
-    E --> F[Executor 退出]
-```
-
-### 二者区别总结
-
-|行为|`shutdown()`|`shutdownAndDrain()`|
+| 行为 | `shutdown()` | `shutdownAndDrain()` |
 |---|---|---|
-|接受新任务|否|否|
-|停止 source|是|是|
-|正在执行中的任务|完成|完成|
-|已入队但未开始执行的任务|丢弃|继续执行|
-|目标|尽快停止|有序排空|
+| 接受新任务 | 否 | 否 |
+| 停止 source | 是 | 是 |
+| 正在执行中的任务 | 完成 | 完成 |
+| 已入队但未开始执行的任务 | 丢弃 | 继续执行 |
+| 目标 | 尽快停止 | 有序排空 |
 
-这也是中间件执行器里非常重要的一点：停止不是单一动作，而是一套明确的生命周期语义。
+## 最小示例
 
-
-## 一个最小示例
+### 1. 定时任务
 
 ```cpp
 #include "Executor.h"
 #include "TimerSource.h"
+#include "Utils.h"
+
+#include <atomic>
+#include <chrono>
+#include <memory>
+#include <thread>
+
+int main() {
+    jobq::Executor ex{2};
+    std::atomic_int tick_count{0};
+
+    auto timer = std::make_shared<jobq::TimerSource>(
+        jobq::TimerSource::Mode::REPEATING,
+        100,
+        [&tick_count]() { ++tick_count; });
+
+    ex.registerSource(timer);
+
+    auto runner = jobq::runExecutor(ex);
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    ex.shutdownAndDrain();
+    runner.join();
+}
+```
+
+### 2. 手动触发任务
+
+```cpp
+#include "Executor.h"
+#include "TriggerSource.h"
+#include "Utils.h"
+
 #include <atomic>
 #include <memory>
 
 int main() {
-    using namespace jobq;
+    jobq::Executor ex{};
+    std::atomic_bool fired{false};
 
-    Executor ex{2};
-    std::atomic_int tick_count{0};
+    auto src = std::make_shared<jobq::TriggerSource>(
+        "demo-trigger",
+        [&fired]() { fired = true; });
 
-    auto timer = std::make_shared<TimerSource>(
-        TimerSource::Mode::REPEATING,
-        100,
-        [&tick_count]() {
-            ++tick_count;
-        });
+    ex.registerSource(src);
+    auto runner = jobq::runExecutor(ex);
 
-    ex.registerSource(timer);
-    ex.run();
+    src->trigger();
+
+    ex.shutdownAndDrain();
+    runner.join();
 }
 ```
 
-在真实使用中，通常会由另一个线程在合适时机调用：
+## 测试覆盖
 
-- `shutdown()`，快速停机
-- `shutdownAndDrain()`，有序排空后停机
+当前测试已覆盖的行为包括：
+
+- 队列基本 push / pop
+- `close()` 对阻塞消费者的唤醒
+- close 后 drain 行为
+- 多 worker 并发消费
+- executor 的启动与等待
+- `shutdown()` 与 `shutdownAndDrain()` 的语义差异
+- one-shot timer 只触发一次
+- repeating timer 重复触发
+- 多个 timer 并发工作
+- 多 worker 下 timer 回调执行
+- `TriggerSource` 注册与触发
 
