@@ -16,6 +16,7 @@ struct Q::Impl {
             }
             jobs.emplace_back(std::move(j));
         }
+        depth++;
         can_pop.notify_one();
         return true;
     }
@@ -29,6 +30,7 @@ struct Q::Impl {
         }
         auto job = std::move(jobs.front()); // is this copy ok?
         jobs.pop_front();
+        depth--;
         return job;
     }
 
@@ -43,6 +45,7 @@ struct Q::Impl {
         }
         auto job = std::move(jobs.front());
         jobs.pop_front();
+        depth--;
         return job;
     }
 
@@ -54,10 +57,13 @@ struct Q::Impl {
         can_pop.notify_all();
     }
 
+    int getDepth() const { return depth.load(); }
+
     std::list<Job> jobs;
     std::mutex mtx;
     std::condition_variable can_pop;
     bool closed{false};
+    std::atomic_int depth{};
 };
 
 /// Q
@@ -75,5 +81,7 @@ void Q::close() { impl_->close(); }
 Q::Q() : impl_{std::make_unique<Impl>()} {}
 
 Q::~Q() = default;
+
+int Q::getDepth() const { return impl_->getDepth(); }
 
 } // namespace jobq

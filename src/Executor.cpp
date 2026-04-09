@@ -12,6 +12,11 @@
 namespace jobq {
 
 struct Executor::Impl {
+    std::atomic_int jobs_submitted{};
+    std::atomic_int jobs_executed{};
+    std::atomic_int jobs_discarded{};
+    std::atomic_int queue_depth{};
+    std::atomic_int active_workers{};
     Q q{};
     std::vector<std::thread> worker_threads{};
     std::vector<Worker> workers{};
@@ -47,6 +52,7 @@ struct Executor::Impl {
                     loginfo("fetchAndDispatch got no job");
                     continue;
                 }
+                jobs_submitted++;
                 q.pushJob(*job);
             }
             uniqlock.unlock();
@@ -93,7 +99,10 @@ struct Executor::Impl {
         // runForever 会执行完剩下的任务
     }
 
-    bool submitJob(Job j) { return q.pushJob(j); }
+    bool submitJob(Job j) {
+        jobs_submitted++;
+        return q.pushJob(j);
+    }
 
     void shutdown() {
         q.close();
@@ -111,6 +120,7 @@ struct Executor::Impl {
         // drain the q, discarding
         while (auto job = q.popOne()) {
             // TODO log metadata on discard
+            jobs_discarded++;
         }
     }
 
@@ -133,6 +143,17 @@ struct Executor::Impl {
             dispatcher.join();
         }
     }
+
+    Stats getStats() {
+        Stats s{};
+        s.active_workers = active_workers.load();
+        s.jobs_discarded = jobs_discarded.load();
+        s.jobs_executed = jobs_executed.load();
+        s.jobs_submitted = jobs_submitted.load();
+        s.queue_depth = q.getDepth();
+;
+        return s;
+    }
 };
 
 /// api
@@ -153,5 +174,7 @@ bool Executor::submitJob(Job j) { return impl_->submitJob(j); }
 void Executor::shutdown() { impl_->shutdown(); }
 
 void Executor::shutdownAndDrain() { impl_->shutdownAndDrain(); }
+
+Stats Executor::getStats() const { return impl_->getStats(); }
 
 } // namespace jobq

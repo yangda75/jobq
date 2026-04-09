@@ -5,6 +5,13 @@
 #include <memory>
 
 namespace jobq {
+struct Stats {
+    int jobs_submitted;
+    int jobs_executed;
+    int jobs_discarded;
+    int queue_depth;
+    int active_workers;
+};
 /// 1.wait 2.take 3.execute
 class Executor {
   public:
@@ -19,6 +26,7 @@ class Executor {
 
     explicit Executor(size_t num_threads = 1);
     ~Executor();
+    Stats getStats() const;
 
   private:
     struct Impl;

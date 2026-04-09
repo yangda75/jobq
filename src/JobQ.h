@@ -19,6 +19,8 @@ class Q {
     // after close, no push is accepted
     void close();
 
+    int getDepth() const;
+
     Q();
     ~Q();
 
