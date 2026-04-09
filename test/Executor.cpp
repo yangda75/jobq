@@ -205,7 +205,7 @@ TEST_CASE("timerSource working") {
     ex.registerSource(src);
     std::thread th{[&ex]() { ex.run(); }};
     using namespace std::chrono_literals;
-    std::this_thread::sleep_for(20ms);
+    std::this_thread::sleep_for(50ms);
     ex.shutdownAndDrain();
     th.join();
 
