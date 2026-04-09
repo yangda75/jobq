@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Source.h"
+#include <atomic>
 
 namespace jobq {
 

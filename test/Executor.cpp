@@ -9,6 +9,7 @@
 #include <chrono>
 #include <memory>
 #include <thread>
+#include <deque>
 
 TEST_CASE("run will run") {
     jobq::Executor ex{};

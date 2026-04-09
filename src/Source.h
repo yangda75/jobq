@@ -1,6 +1,8 @@
 #pragma once
 #include "Job.h"
 #include <optional>
+#include <string>
+#include <memory>
 
 namespace jobq {
 /// 任务来源
