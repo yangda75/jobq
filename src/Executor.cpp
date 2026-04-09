@@ -40,8 +40,8 @@ struct Executor::Impl {
                 loginfo("fetchAndDispatch done, stopped");
                 return;
             }
-            loginfo("fetchAndDispatch wakeup, number of ready srcs: {}",
-                    ready_sources.size());
+            // loginfo("fetchAndDispatch wakeup, number of ready srcs: {}",
+            //         ready_sources.size());
             while (!ready_sources.empty()) {
                 auto src = ready_sources.front();
                 ready_sources.pop_front();
@@ -73,6 +73,7 @@ struct Executor::Impl {
             for (int i = 0; i < nthreads; i++) {
                 workers.emplace_back(q);
                 auto &worker_i = workers[i];
+                worker_i.setExecutedJobCounter(jobs_executed);
                 worker_threads.emplace_back(
                     std::thread{[&worker_i]() { worker_i.runForever(); }});
             }
@@ -150,7 +151,7 @@ struct Executor::Impl {
         s.jobs_executed = jobs_executed.load();
         s.jobs_submitted = jobs_submitted.load();
         s.queue_depth = q.getDepth();
-        ;
+
         return s;
     }
 };

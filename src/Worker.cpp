@@ -5,6 +5,7 @@
 namespace jobq {
 struct Worker::Impl {
     std::atomic_bool stopped{};
+    std::atomic_int *counter{};
     Impl(Q &q) : q_ref{q} {}
     int runUntilEmpty() {
         loginfo("worker started");
@@ -19,6 +20,9 @@ struct Worker::Impl {
                     break;
                 }
                 (*job)();
+                if (counter) {
+                    (*counter)++;
+                }
                 job_cnt++;
             } catch (std::exception const &e) {
                 logerror("Failed to run job, exception: {}", e.what());
@@ -34,11 +38,15 @@ struct Worker::Impl {
         }
         while (auto job = q_ref.popOne()) {
             if (stopped) {
-                // a job is poped from the q, but will not run, what should I do here?
+                // a job is poped from the q, but will not run, what should I do
+                // here?
                 break;
             }
             try {
                 (*job)();
+                if (counter) {
+                    (*counter)++;
+                }
                 job_cnt++;
             } catch (std::exception const &e) {
                 logerror("Failed to run job, exception: {}", e.what());
@@ -48,6 +56,9 @@ struct Worker::Impl {
     }
 
     void stop() { stopped = true; }
+    void setExecutedJobCounter(std::atomic_int &counter_in) {
+        counter = &counter_in;
+    }
 
     Q &q_ref;
     int job_cnt{};
@@ -69,5 +80,9 @@ int Worker::runUntilEmpty() { return impl_->runUntilEmpty(); }
 int Worker::runForever() { return impl_->runForever(); }
 
 void Worker::stop() { impl_->stop(); }
+
+void Worker::setExecutedJobCounter(std::atomic_int &counter) {
+    impl_->setExecutedJobCounter(counter);
+}
 
 } // namespace jobq

@@ -330,14 +330,16 @@ TEST_CASE("multiple concurrent repeating timers") {
         callback_cnt_vec.emplace_back(
             0); // deque push back is construction in place
     }
+    using namespace std::chrono_literals;
     for (int i = 0; i < TIMER_CNT; i++) {
         jobq::SharedSourcePtr src = std::make_shared<jobq::TimerSource>(
-            jobq::TimerSource::Mode::REPEATING, 5,
-            [&callback_cnt_vec, i]() { callback_cnt_vec[i]++; });
+            jobq::TimerSource::Mode::REPEATING, 5, [&callback_cnt_vec, i]() {
+                std::this_thread::sleep_for(10ms);
+                callback_cnt_vec[i]++;
+            });
         ex.registerSource(src);
     }
     auto th = jobq::runExecutor(ex);
-    using namespace std::chrono_literals;
     std::this_thread::sleep_for(100ms);
     auto stat = ex.getStats();
     REQUIRE(stat.jobs_submitted > stat.jobs_executed);
@@ -354,14 +356,16 @@ TEST_CASE("multiple concurrent repeating timers multiple worker threads") {
         callback_cnt_vec.emplace_back(
             0); // deque push back is construction in place
     }
+    using namespace std::chrono_literals;
     for (int i = 0; i < TIMER_CNT; i++) {
         jobq::SharedSourcePtr src = std::make_shared<jobq::TimerSource>(
-            jobq::TimerSource::Mode::REPEATING, 1,
-            [&callback_cnt_vec, i]() { callback_cnt_vec[i]++; });
+            jobq::TimerSource::Mode::REPEATING, 1, [&callback_cnt_vec, i]() {
+                std::this_thread::sleep_for(10ms);
+                callback_cnt_vec[i]++;
+            });
         ex.registerSource(src);
     }
     auto th = jobq::runExecutor(ex);
-    using namespace std::chrono_literals;
     std::this_thread::sleep_for(50ms);
     auto stat = ex.getStats();
     REQUIRE(stat.jobs_submitted > stat.jobs_executed);

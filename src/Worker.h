@@ -1,5 +1,6 @@
 #pragma once
 #include "JobQ.h"
+#include <atomic>
 #include <memory>
 
 namespace jobq {
@@ -12,8 +13,10 @@ class Worker {
 
     explicit Worker(Q &);
     ~Worker();
-    Worker(Worker&&);
-    Worker& operator=(Worker&&);
+    Worker(Worker &&);
+    Worker &operator=(Worker &&);
+
+    void setExecutedJobCounter(std::atomic_int &count);
 
   private:
     struct Impl;
