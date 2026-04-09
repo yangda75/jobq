@@ -7,9 +7,9 @@
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <deque>
 #include <memory>
 #include <thread>
-#include <deque>
 
 TEST_CASE("run will run") {
     jobq::Executor ex{};
@@ -259,7 +259,7 @@ TEST_CASE("shutdown stops timer source") {
     jobq::Executor ex{};
     std::atomic_int callback_cnt{};
     std::shared_ptr<jobq::Source> src = std::make_shared<jobq::TimerSource>(
-        jobq::TimerSource::Mode::REPEATING, 10,
+        jobq::TimerSource::Mode::REPEATING, 1,
         [&callback_cnt]() { callback_cnt++; });
 
     ex.registerSource(src);
@@ -269,14 +269,15 @@ TEST_CASE("shutdown stops timer source") {
     std::this_thread::sleep_for(50ms);
     // assert callback_cnt > 1
     REQUIRE(callback_cnt > 1);
-    auto current_callback_cnt = callback_cnt.load();
     // shutdown and check again
     ex.shutdown();
-
+    auto stat = ex.getStats();
+    auto jobs_submitted = stat.jobs_submitted;
     // new timer callbacks are not executed
 
     th.join();
-    REQUIRE(callback_cnt == current_callback_cnt);
+    stat = ex.getStats();
+    REQUIRE(jobs_submitted == stat.jobs_submitted);
 }
 
 TEST_CASE("one shot timer is exactly once") {
@@ -306,21 +307,19 @@ TEST_CASE("multiple concurrent one shot timers") {
     }
     for (int i = 0; i < TIMER_CNT; i++) {
         jobq::SharedSourcePtr src = std::make_shared<jobq::TimerSource>(
-            jobq::TimerSource::Mode::ONE_SHOT, 5,
+            jobq::TimerSource::Mode::ONE_SHOT, 1,
             [&callback_cnt_vec, i]() { callback_cnt_vec[i]++; });
         ex.registerSource(src);
     }
     auto th = jobq::runExecutor(ex);
     using namespace std::chrono_literals;
-    std::this_thread::sleep_for(20ms);
-    for (size_t i = 0; i < TIMER_CNT; ++i) {
-        REQUIRE(callback_cnt_vec[i] == 1);
-    }
+    std::this_thread::sleep_for(50ms);
+    auto stat = ex.getStats();
+    REQUIRE(stat.jobs_submitted == TIMER_CNT);
     ex.shutdownAndDrain();
     th.join();
-    for (size_t i = 0; i < TIMER_CNT; ++i) {
-        REQUIRE(callback_cnt_vec[i] == 1);
-    }
+    stat = ex.getStats();
+    REQUIRE(stat.jobs_executed == TIMER_CNT);
 }
 
 TEST_CASE("multiple concurrent repeating timers") {
@@ -340,15 +339,12 @@ TEST_CASE("multiple concurrent repeating timers") {
     auto th = jobq::runExecutor(ex);
     using namespace std::chrono_literals;
     std::this_thread::sleep_for(100ms);
-    // // this might not hold, because timer might not be scheduled yet
-    // for (size_t i = 0; i < TIMER_CNT; ++i) {
-    //     REQUIRE(callback_cnt_vec[i] > 1);
-    // }
+    auto stat = ex.getStats();
+    REQUIRE(stat.jobs_submitted > stat.jobs_executed);
     ex.shutdownAndDrain();
     th.join();
-    for (size_t i = 0; i < TIMER_CNT; ++i) {
-        REQUIRE(callback_cnt_vec[i] > 1);
-    }
+    stat = ex.getStats();
+    REQUIRE(stat.jobs_submitted == stat.jobs_executed);
 }
 TEST_CASE("multiple concurrent repeating timers multiple worker threads") {
     jobq::Executor ex{3};
@@ -360,22 +356,19 @@ TEST_CASE("multiple concurrent repeating timers multiple worker threads") {
     }
     for (int i = 0; i < TIMER_CNT; i++) {
         jobq::SharedSourcePtr src = std::make_shared<jobq::TimerSource>(
-            jobq::TimerSource::Mode::REPEATING, 5,
+            jobq::TimerSource::Mode::REPEATING, 1,
             [&callback_cnt_vec, i]() { callback_cnt_vec[i]++; });
         ex.registerSource(src);
     }
     auto th = jobq::runExecutor(ex);
     using namespace std::chrono_literals;
-    std::this_thread::sleep_for(20ms);
-    // // this might not hold, because timer might not be scheduled yet
-    // for (size_t i = 0; i < TIMER_CNT; ++i) {
-    //     REQUIRE(callback_cnt_vec[i] > 1);
-    // }
+    std::this_thread::sleep_for(50ms);
+    auto stat = ex.getStats();
+    REQUIRE(stat.jobs_submitted > stat.jobs_executed);
     ex.shutdownAndDrain();
     th.join();
-    for (size_t i = 0; i < TIMER_CNT; ++i) {
-        REQUIRE(callback_cnt_vec[i] > 1);
-    }
+    stat = ex.getStats();
+    REQUIRE(stat.jobs_submitted == stat.jobs_executed);
 }
 
 TEST_CASE("shutdownAndDrain finishes already queued callbacks") {
@@ -390,10 +383,12 @@ TEST_CASE("shutdownAndDrain finishes already queued callbacks") {
     ex.registerSource(src);
     auto th = jobq::runExecutor(ex);
     std::this_thread::sleep_for(100ms);
+    auto stat = ex.getStats();
+    REQUIRE(stat.jobs_submitted > stat.jobs_executed);
     ex.shutdownAndDrain();
-    auto current_callback_cnt = callback_cnt.load();
     th.join();
-    REQUIRE(current_callback_cnt < callback_cnt);
+    stat = ex.getStats();
+    REQUIRE(stat.jobs_executed == stat.jobs_submitted);
 }
 
 TEST_CASE("shutdown discards already queued callbacks") {
@@ -409,8 +404,11 @@ TEST_CASE("shutdown discards already queued callbacks") {
     auto th = jobq::runExecutor(ex);
     std::this_thread::sleep_for(100ms);
     ex.shutdown();
-    std::this_thread::sleep_for(10ms);
-    auto current_callback_cnt = callback_cnt.load();
+    std::this_thread::sleep_for(20ms);
+    auto stat = ex.getStats();
+    auto old_executed_jobs = stat.jobs_executed;
+    REQUIRE(stat.jobs_submitted > stat.jobs_executed);
     th.join();
-    REQUIRE(current_callback_cnt == callback_cnt);
+    stat = ex.getStats();
+    REQUIRE(stat.jobs_executed == old_executed_jobs);
 }

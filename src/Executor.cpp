@@ -15,7 +15,6 @@ struct Executor::Impl {
     std::atomic_int jobs_submitted{};
     std::atomic_int jobs_executed{};
     std::atomic_int jobs_discarded{};
-    std::atomic_int queue_depth{};
     std::atomic_int active_workers{};
     Q q{};
     std::vector<std::thread> worker_threads{};
@@ -151,7 +150,7 @@ struct Executor::Impl {
         s.jobs_executed = jobs_executed.load();
         s.jobs_submitted = jobs_submitted.load();
         s.queue_depth = q.getDepth();
-;
+        ;
         return s;
     }
 };
