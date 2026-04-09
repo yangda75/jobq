@@ -14,7 +14,7 @@ TEST_CASE("Q push/pop throughput") {
         for (int i = 0; i < PRODUCERS; i++) {
             producer_threads.push_back(std::thread{[&count, &q]() {
                 for (int j = 0; j < N; j++) {
-                    q.pushJob([&count]() { count++; });
+                    q.pushJob({.fn = [&count]() { count++; }});
                 }
             }});
         }
@@ -26,7 +26,7 @@ TEST_CASE("Q push/pop throughput") {
         for (int i = 0; i < CONSUMERS; i++) {
             consumer_threads.push_back(std::thread{[&q]() {
                 while (auto job = q.popOneFor(10)) {
-                    (*job)();
+                    (job->fn)();
                 }
             }});
         }

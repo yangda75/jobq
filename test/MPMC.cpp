@@ -22,7 +22,7 @@ TEST_CASE("bursted") {
 
             producers.emplace_back([&produced_cnt, &consumed_cnt, &q]() {
                 produced_cnt++;
-                q.pushJob([&consumed_cnt]() { consumed_cnt++; });
+                q.pushJob({.fn = [&consumed_cnt]() { consumed_cnt++; }});
             });
         }
     }

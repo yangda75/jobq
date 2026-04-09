@@ -1,22 +1,25 @@
+#include "Job.h"
 #include "JobQ.h"
 #include "Log.h"
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <thread>
 
+bool pushJob(jobq::Q &q, jobq::JobFn f) { return q.pushJob({.fn = f}); }
+
 TEST_CASE("test basic push operation compiles") {
     jobq::Q q{};
     auto job = []() {}; // empty lambda
-    q.pushJob(job);
+    pushJob(q, job);
 }
 
 TEST_CASE("test job can be popped") {
     jobq::Q q{};
     int a = 123;
     auto add_one = [&a]() { a += 1; };
-    q.pushJob(add_one);
+    pushJob(q, add_one);
     auto job = q.popOne();
-    (*job)();
+    (job->fn)();
     REQUIRE(a == 123 + 1);
 }
 
@@ -29,11 +32,11 @@ TEST_CASE("test 100 jobs") {
             jobq::loginfo("val:{}", i);
             sum += i + 1;
         };
-        q.pushJob(std::move(job));
+        pushJob(q, std::move(job));
     }
     for (auto i = 0; i < N; i++) {
         auto job = q.popOne();
-        (*job)();
+        (job->fn)();
         jobq::loginfo("sum: {}", sum);
     }
     REQUIRE(sum == 5050);
@@ -65,11 +68,11 @@ TEST_CASE("close unblocks threads blocked in pop") {
 TEST_CASE("push after close returns false") {
     jobq::Q q{};
 
-    auto push_before_close = q.pushJob([]() { jobq::loginfo("1"); });
+    auto push_before_close = pushJob(q, []() { jobq::loginfo("1"); });
     REQUIRE(push_before_close);
 
     q.close();
-    auto push_after_close = q.pushJob([]() { jobq::loginfo("2"); });
+    auto push_after_close = pushJob(q, []() { jobq::loginfo("2"); });
     REQUIRE(push_after_close == false);
 }
 
@@ -77,7 +80,7 @@ TEST_CASE("drain after close") {
     jobq::Q q{};
     constexpr int N = 10;
     for (int i = 0; i < N; i++) {
-        REQUIRE(q.pushJob([i]() { jobq::loginfo("{}", i); }));
+        REQUIRE(pushJob(q, [i]() { jobq::loginfo("{}", i); }));
     }
 
     q.close();
