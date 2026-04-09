@@ -339,7 +339,7 @@ TEST_CASE("multiple concurrent repeating timers") {
     }
     auto th = jobq::runExecutor(ex);
     using namespace std::chrono_literals;
-    std::this_thread::sleep_for(20ms);
+    std::this_thread::sleep_for(100ms);
     // // this might not hold, because timer might not be scheduled yet
     // for (size_t i = 0; i < TIMER_CNT; ++i) {
     //     REQUIRE(callback_cnt_vec[i] > 1);
