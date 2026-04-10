@@ -8,14 +8,13 @@ TriggerSource::TriggerSource(std::string id, JobFn f)
 bool TriggerSource::isReady() { return true; }
 
 std::optional<Job> TriggerSource::takeJob() {
-    if (finished_ || stopped_) {
+    if (stopped_) {
         return std::nullopt;
     }
-    finished_ = true;
     return job_;
 }
 
-bool TriggerSource::isFinished() { return finished_; }
+bool TriggerSource::isFinished() { return stopped_; }
 void TriggerSource::stop() { stopped_ = true; }
 
 void TriggerSource::trigger() { ready_callback_(); }

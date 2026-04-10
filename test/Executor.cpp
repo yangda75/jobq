@@ -407,3 +407,25 @@ TEST_CASE("shutdown discards already queued callbacks") {
     stat = ex.getStats();
     REQUIRE(stat.jobs_executed == old_executed_jobs);
 }
+
+TEST_CASE("triggerSource trigger multiple times") {
+    jobq::Executor ex{};
+    std::atomic_int callback_cnt{};
+    auto src = std::make_shared<jobq::TriggerSource>(
+        "MulitpleTimeTrigger",
+        [&callback_cnt]() { callback_cnt.fetch_add(1); });
+
+    ex.registerSource(src);
+
+    auto th = jobq::runExecutor(ex);
+
+    constexpr auto N = 99;
+    for (int i = 0; i < N; i++) {
+        src->trigger();
+    }
+    std::this_thread::sleep_for(20ms);
+    ex.shutdownAndDrain();
+    th.join();
+
+    REQUIRE(callback_cnt == N);
+}

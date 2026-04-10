@@ -19,7 +19,6 @@ class TriggerSource final : public Source {
 
   private:
     Job job_; // job id is determined in executor
-    std::atomic_bool finished_{false};
     std::atomic_bool stopped_{false};
 };
 } // namespace jobq
