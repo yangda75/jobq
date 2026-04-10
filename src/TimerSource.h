@@ -3,18 +3,20 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <cstdint>
 #include <mutex>
 #include <thread>
 
 namespace jobq {
+enum class TimerMode {
+    ONE_SHOT,
+    REPEATING,
+};
+
 template <typename Rep, class Period> class TimerSource final : public Source {
   public:
-    enum class Mode {
-        ONE_SHOT,
-        REPEATING,
-    };
-
-    TimerSource(Mode mode, std::chrono::duration<Rep, Period> timeout, JobFn f)
+    TimerSource(TimerMode mode, std::chrono::duration<Rep, Period> timeout,
+                JobFn f)
         : Source{"TimerSource"}, mode_{mode}, timeout_{timeout}, job_{.fn = f},
           start_time_{std::chrono::steady_clock::now()} {}
 
@@ -23,7 +25,7 @@ template <typename Rep, class Period> class TimerSource final : public Source {
         if (stopped_ || finished_) {
             return std::nullopt;
         }
-        if (mode_ == Mode::ONE_SHOT) {
+        if (mode_ == TimerMode::ONE_SHOT) {
             finished_ = true;
         }
         return job_;
@@ -58,13 +60,13 @@ template <typename Rep, class Period> class TimerSource final : public Source {
                 break;
             }
             ready_callback_();
-            if (mode_ == Mode::ONE_SHOT) {
+            if (mode_ == TimerMode::ONE_SHOT) {
                 break;
             }
         }
     }
     std::chrono::duration<Rep, Period> timeout_{};
-    Mode mode_{};
+    TimerMode mode_{};
     std::atomic_bool stopped_{};
     std::chrono::steady_clock::time_point start_time_{};
     Job job_{}; // job id is determined in executor
@@ -73,4 +75,6 @@ template <typename Rep, class Period> class TimerSource final : public Source {
     std::mutex mtx_{};
     std::condition_variable cv_{};
 };
+
+using TimerSourceMs = TimerSource<int64_t, std::milli>;
 } // namespace jobq

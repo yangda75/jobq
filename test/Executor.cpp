@@ -10,6 +10,7 @@
 #include <deque>
 #include <memory>
 #include <thread>
+using namespace std::chrono_literals;
 
 TEST_CASE("run will run") {
     jobq::Executor ex{};
@@ -190,21 +191,20 @@ TEST_CASE("shutdownAndDrain before run with queued jobs") {
 
 TEST_CASE("registerSource compiles") {
     jobq::Executor ex{};
-    std::shared_ptr<jobq::Source> src = std::make_shared<jobq::TimerSource>(
-        jobq::TimerSource::Mode::ONE_SHOT, 100,
-        []() { jobq::loginfo("timer!!!"); });
+    std::shared_ptr<jobq::Source> src =
+        std::make_shared<jobq::TimerSource<int64_t, std::milli>>(
+            jobq::TimerMode::ONE_SHOT, 100ms,
+            []() { jobq::loginfo("timer!!!"); });
     ex.registerSource(src);
 }
 
 TEST_CASE("timerSource working") {
     jobq::Executor ex{};
     std::atomic_bool job_done{false};
-    std::shared_ptr<jobq::Source> src = std::make_shared<jobq::TimerSource>(
-        jobq::TimerSource::Mode::ONE_SHOT, 10,
-        [&job_done]() { job_done = true; });
+    std::shared_ptr<jobq::Source> src = std::make_shared<jobq::TimerSourceMs>(
+        jobq::TimerMode::ONE_SHOT, 10ms, [&job_done]() { job_done = true; });
     ex.registerSource(src);
     std::thread th{[&ex]() { ex.run(); }};
-    using namespace std::chrono_literals;
     std::this_thread::sleep_for(50ms);
     ex.shutdownAndDrain();
     th.join();
@@ -216,13 +216,12 @@ TEST_CASE("repeating timer source working") {
     jobq::Executor ex{};
     std::atomic_int num_job_done{false};
 
-    std::shared_ptr<jobq::Source> src = std::make_shared<jobq::TimerSource>(
-        jobq::TimerSource::Mode::REPEATING, 10,
+    std::shared_ptr<jobq::Source> src = std::make_shared<jobq::TimerSourceMs>(
+        jobq::TimerMode::REPEATING, 10ms,
         [&num_job_done]() { ++num_job_done; });
     ex.registerSource(src);
 
     std::thread th{[&ex]() { ex.run(); }};
-    using namespace std::chrono_literals;
     std::this_thread::sleep_for(100ms);
     ex.shutdownAndDrain();
     th.join();
@@ -248,7 +247,6 @@ TEST_CASE("trigger source working") {
 
     std::thread th{[&ex]() { ex.run(); }};
     trigger_src->trigger();
-    using namespace std::chrono_literals;
     std::this_thread::sleep_for(20ms);
     ex.shutdownAndDrain();
     th.join();
@@ -258,14 +256,12 @@ TEST_CASE("trigger source working") {
 TEST_CASE("shutdown stops timer source") {
     jobq::Executor ex{};
     std::atomic_int callback_cnt{};
-    std::shared_ptr<jobq::Source> src = std::make_shared<jobq::TimerSource>(
-        jobq::TimerSource::Mode::REPEATING, 1,
-        [&callback_cnt]() { callback_cnt++; });
+    std::shared_ptr<jobq::Source> src = std::make_shared<jobq::TimerSourceMs>(
+        jobq::TimerMode::REPEATING, 1ms, [&callback_cnt]() { callback_cnt++; });
 
     ex.registerSource(src);
 
     std::thread th{[&ex]() { ex.run(); }};
-    using namespace std::chrono_literals;
     std::this_thread::sleep_for(50ms);
     // assert callback_cnt > 1
     REQUIRE(callback_cnt > 1);
@@ -283,13 +279,11 @@ TEST_CASE("shutdown stops timer source") {
 TEST_CASE("one shot timer is exactly once") {
     jobq::Executor ex{};
     std::atomic_int callback_cnt{};
-    std::shared_ptr<jobq::Source> src = std::make_shared<jobq::TimerSource>(
-        jobq::TimerSource::Mode::ONE_SHOT, 5,
-        [&callback_cnt]() { callback_cnt++; });
+    std::shared_ptr<jobq::Source> src = std::make_shared<jobq::TimerSourceMs>(
+        jobq::TimerMode::ONE_SHOT, 5ms, [&callback_cnt]() { callback_cnt++; });
 
     ex.registerSource(src);
     auto th = jobq::runExecutor(ex);
-    using namespace std::chrono_literals;
     std::this_thread::sleep_for(100ms);
     REQUIRE(callback_cnt == 1);
     ex.shutdownAndDrain();
@@ -306,13 +300,12 @@ TEST_CASE("multiple concurrent one shot timers") {
             0); // deque push back is construction in place
     }
     for (int i = 0; i < TIMER_CNT; i++) {
-        jobq::SharedSourcePtr src = std::make_shared<jobq::TimerSource>(
-            jobq::TimerSource::Mode::ONE_SHOT, 1,
+        jobq::SharedSourcePtr src = std::make_shared<jobq::TimerSourceMs>(
+            jobq::TimerMode::ONE_SHOT, 1ms,
             [&callback_cnt_vec, i]() { callback_cnt_vec[i]++; });
         ex.registerSource(src);
     }
     auto th = jobq::runExecutor(ex);
-    using namespace std::chrono_literals;
     std::this_thread::sleep_for(50ms);
     auto stat = ex.getStats();
     REQUIRE(stat.jobs_submitted == TIMER_CNT);
@@ -330,10 +323,9 @@ TEST_CASE("multiple concurrent repeating timers") {
         callback_cnt_vec.emplace_back(
             0); // deque push back is construction in place
     }
-    using namespace std::chrono_literals;
     for (int i = 0; i < TIMER_CNT; i++) {
-        jobq::SharedSourcePtr src = std::make_shared<jobq::TimerSource>(
-            jobq::TimerSource::Mode::REPEATING, 5, [&callback_cnt_vec, i]() {
+        jobq::SharedSourcePtr src = std::make_shared<jobq::TimerSourceMs>(
+            jobq::TimerMode::REPEATING, 5ms, [&callback_cnt_vec, i]() {
                 std::this_thread::sleep_for(10ms);
                 callback_cnt_vec[i]++;
             });
@@ -356,10 +348,9 @@ TEST_CASE("multiple concurrent repeating timers multiple worker threads") {
         callback_cnt_vec.emplace_back(
             0); // deque push back is construction in place
     }
-    using namespace std::chrono_literals;
     for (int i = 0; i < TIMER_CNT; i++) {
-        jobq::SharedSourcePtr src = std::make_shared<jobq::TimerSource>(
-            jobq::TimerSource::Mode::REPEATING, 1, [&callback_cnt_vec, i]() {
+        jobq::SharedSourcePtr src = std::make_shared<jobq::TimerSourceMs>(
+            jobq::TimerMode::REPEATING, 1ms, [&callback_cnt_vec, i]() {
                 std::this_thread::sleep_for(10ms);
                 callback_cnt_vec[i]++;
             });
@@ -378,9 +369,8 @@ TEST_CASE("multiple concurrent repeating timers multiple worker threads") {
 TEST_CASE("shutdownAndDrain finishes already queued callbacks") {
     jobq::Executor ex{};
     std::atomic_int callback_cnt{};
-    using namespace std::chrono_literals;
-    jobq::SharedSourcePtr src = std::make_shared<jobq::TimerSource>(
-        jobq::TimerSource::Mode::REPEATING, 1, [&callback_cnt]() {
+    jobq::SharedSourcePtr src = std::make_shared<jobq::TimerSourceMs>(
+        jobq::TimerMode::REPEATING, 1ms, [&callback_cnt]() {
             std::this_thread::sleep_for(10ms);
             callback_cnt++;
         });
@@ -398,9 +388,8 @@ TEST_CASE("shutdownAndDrain finishes already queued callbacks") {
 TEST_CASE("shutdown discards already queued callbacks") {
     jobq::Executor ex{};
     std::atomic_int callback_cnt{};
-    using namespace std::chrono_literals;
-    jobq::SharedSourcePtr src = std::make_shared<jobq::TimerSource>(
-        jobq::TimerSource::Mode::REPEATING, 1, [&callback_cnt]() {
+    jobq::SharedSourcePtr src = std::make_shared<jobq::TimerSourceMs>(
+        jobq::TimerMode::REPEATING, 1ms, [&callback_cnt]() {
             std::this_thread::sleep_for(10ms);
             callback_cnt++;
         });
