@@ -26,8 +26,8 @@ add_library(jobq_jobq)
 add_library(jobq::jobq ALIAS jobq_jobq)
 target_sources(
   jobq_jobq
-  PRIVATE src/JobQ.cpp src/Worker.cpp src/Executor.cpp src/TimerSource.cpp
-          src/TriggerSource.cpp src/Utils.cpp
+  PRIVATE src/JobQ.cpp src/Worker.cpp src/Executor.cpp src/TriggerSource.cpp
+          src/Utils.cpp
   PUBLIC FILE_SET
          HEADERS
          BASE_DIRS

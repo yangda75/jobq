@@ -1,33 +1,69 @@
 #pragma once
 #include "Source.h"
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <mutex>
 #include <thread>
 
 namespace jobq {
-class TimerSource final : public Source {
-
+template <typename Rep, class Period> class TimerSource final : public Source {
   public:
     enum class Mode {
         ONE_SHOT,
         REPEATING,
     };
 
-    TimerSource(Mode mode, int timeout_ms, JobFn f);
+    TimerSource(Mode mode, std::chrono::duration<Rep, Period> timeout, JobFn f)
+        : Source{"TimerSource"}, mode_{mode}, timeout_{timeout}, job_{.fn = f},
+          start_time_{std::chrono::steady_clock::now()} {}
 
-    bool isReady() override;
-    std::optional<Job> takeJob() override;
-    bool isFinished() override;
-    void stop() override;
+    bool isReady() override { return true; }
+    std::optional<Job> takeJob() override {
+        if (stopped_ || finished_) {
+            return std::nullopt;
+        }
+        if (mode_ == Mode::ONE_SHOT) {
+            finished_ = true;
+        }
+        return job_;
+    }
 
-    void setReadyCallback(std::function<void()> cb) override;
+    bool isFinished() override { return finished_ || stopped_; }
+    void stop() override {
+        stopped_ = true;
+        cv_.notify_all();
+        timer_thread_.join();
+    }
 
-    ~TimerSource();
+    void setReadyCallback(std::function<void()> cb) override {
+        Source::setReadyCallback(cb);
+        timer_thread_ = std::thread{[this]() { timerLoop(); }};
+    }
+
+    ~TimerSource() {
+        if (!isFinished()) {
+            stop();
+        }
+    }
 
   private:
-    void timerLoop();
-    int timeout_ms_{};
+    void timerLoop() {
+        while (!stopped_) {
+            std::unique_lock uniqlock{mtx_};
+
+            cv_.wait_for(uniqlock, timeout_,
+                         [this]() { return stopped_.load(); });
+            if (stopped_) {
+                break;
+            }
+            ready_callback_();
+            if (mode_ == Mode::ONE_SHOT) {
+                break;
+            }
+        }
+    }
+    std::chrono::duration<Rep, Period> timeout_{};
     Mode mode_{};
     std::atomic_bool stopped_{};
     std::chrono::steady_clock::time_point start_time_{};
