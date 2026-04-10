@@ -65,8 +65,11 @@ struct Executor::Impl {
                     break;
                 }
             }
+            if(all_source_finished){
+                loginfo("fetchAndDispatch done, all source finished");
+                return;
+            }
         }
-        loginfo("fetchAndDispatch done");
     }
     void run() {
         {
