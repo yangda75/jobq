@@ -16,7 +16,8 @@ class Worker {
     Worker(Worker &&);
     Worker &operator=(Worker &&);
 
-    void setExecutedJobCounter(std::atomic_int &count);
+    void setExecutedJobCounter(std::atomic_int &);
+    void setActiveWorkerCounter(std::atomic_int &);
 
   private:
     struct Impl;

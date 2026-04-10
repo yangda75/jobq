@@ -360,9 +360,11 @@ TEST_CASE("multiple concurrent repeating timers multiple worker threads") {
     std::this_thread::sleep_for(50ms);
     auto stat = ex.getStats();
     REQUIRE(stat.jobs_submitted > stat.jobs_executed);
+    REQUIRE(stat.active_workers == 3);
     ex.shutdownAndDrain();
     th.join();
     stat = ex.getStats();
+    REQUIRE(stat.active_workers == 0);
     REQUIRE(stat.jobs_submitted == stat.jobs_executed);
 }
 

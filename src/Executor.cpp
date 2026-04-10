@@ -65,7 +65,7 @@ struct Executor::Impl {
                     break;
                 }
             }
-            if(all_source_finished){
+            if (all_source_finished) {
                 loginfo("fetchAndDispatch done, all source finished");
                 return;
             }
@@ -80,6 +80,7 @@ struct Executor::Impl {
                 workers.emplace_back(q);
                 auto &worker_i = workers[i];
                 worker_i.setExecutedJobCounter(jobs_executed);
+                worker_i.setActiveWorkerCounter(active_workers);
                 worker_threads.emplace_back(
                     std::thread{[&worker_i]() { worker_i.runForever(); }});
             }
