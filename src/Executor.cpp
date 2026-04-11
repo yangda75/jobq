@@ -2,6 +2,7 @@
 #include "JobQ.h"
 #include "Log.h"
 #include "Source.h"
+#include "ThreadName.h"
 #include "Worker.h"
 #include <condition_variable>
 #include <deque>
@@ -81,12 +82,17 @@ struct Executor::Impl {
                 auto &worker_i = workers[i];
                 worker_i.setExecutedJobCounter(jobs_executed);
                 worker_i.setActiveWorkerCounter(active_workers);
-                worker_threads.emplace_back(
-                    std::thread{[&worker_i]() { worker_i.runForever(); }});
+                worker_threads.emplace_back(std::thread{[&worker_i, i]() {
+                    setCurrentThreadName("jobq-worker-" + std::to_string(i));
+                    worker_i.runForever();
+                }});
             }
         }
         // start dispatcher
-        dispatcher = std::thread{[this]() { fetchAndDispatch(); }};
+        dispatcher = std::thread{[this]() {
+            setCurrentThreadName("jobq-dispatcher");
+            fetchAndDispatch();
+        }};
         dispatcher.join();
         for (auto &t : worker_threads) {
             t.join();
