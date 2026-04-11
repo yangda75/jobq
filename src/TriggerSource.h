@@ -8,7 +8,6 @@ namespace jobq {
 class TriggerSource final : public Source {
   public:
     TriggerSource(std::string id, JobFn f);
-    bool isReady() override;
     std::optional<Job> takeJob() override;
     bool isFinished() override;
     void stop() override;

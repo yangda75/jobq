@@ -20,7 +20,6 @@ template <typename Rep, class Period> class TimerSource final : public Source {
         : Source{"TimerSource"}, mode_{mode}, timeout_{timeout}, job_{.fn = f},
           start_time_{std::chrono::steady_clock::now()} {}
 
-    bool isReady() override { return true; }
     std::optional<Job> takeJob() override {
         if (stopped_ || finished_) {
             return std::nullopt;
