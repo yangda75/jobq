@@ -32,7 +32,7 @@ struct Worker::Impl {
             return 0;
         }
         CounterGuard counter_g{active_worker_counter};
-        while (true) {
+        while (!stopped) {
             try {
                 auto job = q_ref.popOneFor(1);
                 if (!job.has_value()) {
@@ -46,6 +46,7 @@ struct Worker::Impl {
             } catch (std::exception const &e) {
                 logerror("Failed to run job, exception: {}", e.what());
             }
+
         }
         loginfo("worker done after {} jobs", job_cnt);
         return job_cnt;
@@ -58,11 +59,6 @@ struct Worker::Impl {
         }
         CounterGuard counter_g{active_worker_counter};
         while (auto job = q_ref.popOne()) {
-            if (stopped) {
-                // a job is poped from the q, but will not run, what should I do
-                // here?
-                break;
-            }
             try {
                 (job->fn)();
                 if (counter) {
@@ -71,6 +67,11 @@ struct Worker::Impl {
                 job_cnt++;
             } catch (std::exception const &e) {
                 logerror("Failed to run job, exception: {}", e.what());
+            }
+            if (stopped) {
+                // a job is poped from the q, but will not run, what should I do
+                // here?
+                break;
             }
         }
         loginfo("worker done");
