@@ -87,10 +87,12 @@ struct Executor::Impl {
                 auto &worker_i = workers[i];
                 worker_i.setExecutedJobCounter(jobs_executed);
                 worker_i.setActiveWorkerCounter(active_workers);
-                worker_threads.emplace_back(std::jthread{[&worker_i, i](std::stop_token token) {
-                    setCurrentThreadName("jobq-worker-" + std::to_string(i));
-                    worker_i.runForever(token);
-                }});
+                worker_threads.emplace_back(
+                    std::jthread{[&worker_i, i](std::stop_token token) {
+                        setCurrentThreadName("jobq-worker-" +
+                                             std::to_string(i));
+                        worker_i.runForever(token);
+                    }});
             }
         }
         for (auto &t : worker_threads) {

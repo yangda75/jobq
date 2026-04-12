@@ -8,8 +8,49 @@
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <deque>
+#include <future>
 #include <memory>
+#include <mutex>
 #include <thread>
+
+/// helpers
+
+class Signal {
+  public:
+    std::future<void> getFuture() { return promise_.get_future(); }
+    void notify() {
+        if (!notified_.exchange(true, std::memory_order_relaxed)) {
+            promise_.set_value();
+        }
+    }
+
+  private:
+    std::promise<void> promise_{};
+    std::atomic_bool notified_{false};
+};
+
+class Gate {
+  public:
+    void wait() {
+        std::unique_lock l{mtx_};
+        cv_.wait(l, [this]() { return open_; });
+    }
+    void open() {
+        {
+            std::lock_guard l{mtx_};
+            open_ = true;
+        }
+        cv_.notify_all();
+    }
+
+  private:
+    std::mutex mtx_{};
+    std::condition_variable cv_{};
+    bool open_{false};
+};
+
+/// testcases
+
 using namespace std::chrono_literals;
 
 TEST_CASE("run will run") {
@@ -117,11 +158,11 @@ TEST_CASE("shutdown empty executor is fine") {
 TEST_CASE("shutdown will get jobs discarded") {
     jobq::Executor ex{};
 
-    std::atomic_bool flag{};
-    REQUIRE(ex.submitJob([&flag]() {
-        while (!flag) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        }
+    Signal started{};
+    Gate gate{};
+    REQUIRE(ex.submitJob([&started, &gate]() {
+        started.notify();
+        gate.wait(); // gate is not yet opened, here
     }));
 
     std::atomic_int finished_cnt{};
@@ -129,10 +170,11 @@ TEST_CASE("shutdown will get jobs discarded") {
         REQUIRE(ex.submitJob([&finished_cnt]() { finished_cnt++; }));
     }
     std::thread t{[&ex]() { ex.run(); }};
+    REQUIRE(started.getFuture().wait_for(2s) == std::future_status::ready);
     // shutdown executor
     ex.shutdown();
     // release blocking job
-    flag = true;
+    gate.open(); // now let the first job continue to finish
     t.join();
     // check all other jobs are discarded
     REQUIRE(finished_cnt == 0);
@@ -141,11 +183,11 @@ TEST_CASE("shutdown will get jobs discarded") {
 TEST_CASE("shutdownAndDrain will get already submitted jobs finished") {
     jobq::Executor ex{};
 
-    std::atomic_bool flag{};
-    REQUIRE(ex.submitJob([&flag]() {
-        while (!flag) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        }
+    Signal started{};
+    Gate gate{};
+    REQUIRE(ex.submitJob([&started, &gate]() {
+        started.notify();
+        gate.wait();
     }));
 
     std::atomic_int finished_cnt{};
@@ -153,10 +195,11 @@ TEST_CASE("shutdownAndDrain will get already submitted jobs finished") {
         REQUIRE(ex.submitJob([&finished_cnt]() { finished_cnt++; }));
     }
     std::thread t{[&ex]() { ex.run(); }};
+    REQUIRE(started.getFuture().wait_for(2s) == std::future_status::ready);
     // shutdown executor
     ex.shutdownAndDrain();
     // release blocking job
-    flag = true;
+    gate.open();
     t.join();
     // check all other jobs are discarded
     REQUIRE(finished_cnt == 100);
@@ -202,11 +245,15 @@ TEST_CASE("registerSource compiles") {
 TEST_CASE("timerSource working") {
     jobq::Executor ex{};
     std::atomic_bool job_done{false};
+    Signal signal{};
     std::shared_ptr<jobq::Source> src = std::make_shared<jobq::TimerSourceMs>(
-        jobq::TimerMode::ONE_SHOT, 10ms, [&job_done]() { job_done = true; });
+        jobq::TimerMode::ONE_SHOT, 10ms, [&job_done, &signal]() {
+            job_done = true;
+            signal.notify();
+        });
     ex.registerSource(src);
     std::thread th{[&ex]() { ex.run(); }};
-    std::this_thread::sleep_for(50ms);
+    signal.getFuture().wait_for(1s);
     ex.shutdownAndDrain();
     th.join();
 
@@ -216,14 +263,18 @@ TEST_CASE("timerSource working") {
 TEST_CASE("repeating timer source working") {
     jobq::Executor ex{};
     std::atomic_int num_job_done{false};
-
+    Signal signal{};
     std::shared_ptr<jobq::Source> src = std::make_shared<jobq::TimerSourceMs>(
-        jobq::TimerMode::REPEATING, 10ms,
-        [&num_job_done]() { ++num_job_done; });
+        jobq::TimerMode::REPEATING, 10ms, [&num_job_done, &signal]() {
+            ++num_job_done;
+            if (num_job_done > 1) {
+                signal.notify();
+            }
+        });
     ex.registerSource(src);
 
     std::thread th{[&ex]() { ex.run(); }};
-    std::this_thread::sleep_for(100ms);
+    signal.getFuture().wait_for(1s);
     ex.shutdownAndDrain();
     th.join();
 
@@ -240,15 +291,19 @@ TEST_CASE("registerSource compiles with TriggerSource") {
 TEST_CASE("trigger source working") {
     jobq::Executor ex{};
     std::atomic_bool job_done{false};
-    auto trigger_src = std::make_shared<jobq::TriggerSource>(
-        "test", [&job_done]() { job_done = true; });
+    Signal signal{};
+    auto trigger_src =
+        std::make_shared<jobq::TriggerSource>("test", [&job_done, &signal]() {
+            job_done = true;
+            signal.notify();
+        });
 
     std::shared_ptr<jobq::Source> src = trigger_src;
     ex.registerSource(src);
 
     std::thread th{[&ex]() { ex.run(); }};
     trigger_src->trigger();
-    std::this_thread::sleep_for(20ms);
+    signal.getFuture().wait_for(1s);
     ex.shutdownAndDrain();
     th.join();
     REQUIRE(job_done);
@@ -257,13 +312,19 @@ TEST_CASE("trigger source working") {
 TEST_CASE("shutdown stops timer source") {
     jobq::Executor ex{};
     std::atomic_int callback_cnt{};
+    Signal signal{};
     std::shared_ptr<jobq::Source> src = std::make_shared<jobq::TimerSourceMs>(
-        jobq::TimerMode::REPEATING, 1ms, [&callback_cnt]() { callback_cnt++; });
+        jobq::TimerMode::REPEATING, 1ms, [&callback_cnt, &signal]() {
+            callback_cnt++;
+            if (callback_cnt > 1) {
+                signal.notify();
+            }
+        });
 
     ex.registerSource(src);
 
     std::thread th{[&ex]() { ex.run(); }};
-    std::this_thread::sleep_for(50ms);
+    signal.getFuture().wait_for(1s);
     // assert callback_cnt > 1
     REQUIRE(callback_cnt > 1);
     // shutdown and check again
@@ -280,12 +341,16 @@ TEST_CASE("shutdown stops timer source") {
 TEST_CASE("one shot timer is exactly once") {
     jobq::Executor ex{};
     std::atomic_int callback_cnt{};
+    Signal signal{};
     std::shared_ptr<jobq::Source> src = std::make_shared<jobq::TimerSourceMs>(
-        jobq::TimerMode::ONE_SHOT, 5ms, [&callback_cnt]() { callback_cnt++; });
+        jobq::TimerMode::ONE_SHOT, 5ms, [&callback_cnt, &signal]() {
+            callback_cnt++;
+            signal.notify();
+        });
 
     ex.registerSource(src);
     auto th = jobq::runExecutor(ex);
-    std::this_thread::sleep_for(100ms);
+    signal.getFuture().wait_for(1s);
     REQUIRE(callback_cnt == 1);
     ex.shutdownAndDrain();
     th.join();
@@ -294,20 +359,21 @@ TEST_CASE("one shot timer is exactly once") {
 
 TEST_CASE("multiple concurrent one shot timers") {
     jobq::Executor ex{};
-    std::deque<std::atomic_int> callback_cnt_vec{};
+    std::atomic_int callback_cnt{};
     constexpr int TIMER_CNT = 10;
-    for (int i = 0; i < TIMER_CNT; i++) {
-        callback_cnt_vec.emplace_back(
-            0); // deque push back is construction in place
-    }
+    Signal signal{};
     for (int i = 0; i < TIMER_CNT; i++) {
         jobq::SharedSourcePtr src = std::make_shared<jobq::TimerSourceMs>(
-            jobq::TimerMode::ONE_SHOT, 1ms,
-            [&callback_cnt_vec, i]() { callback_cnt_vec[i]++; });
+            jobq::TimerMode::ONE_SHOT, 1ms, [&callback_cnt, &signal]() {
+                callback_cnt++;
+                if (callback_cnt == TIMER_CNT) {
+                    signal.notify();
+                }
+            });
         ex.registerSource(src);
     }
     auto th = jobq::runExecutor(ex);
-    std::this_thread::sleep_for(50ms);
+    signal.getFuture().wait_for(1s);
     auto stat = ex.getStats();
     REQUIRE(stat.jobs_submitted == TIMER_CNT);
     ex.shutdownAndDrain();
@@ -412,19 +478,24 @@ TEST_CASE("shutdown discards already queued callbacks") {
 TEST_CASE("triggerSource trigger multiple times") {
     jobq::Executor ex{};
     std::atomic_int callback_cnt{};
+    Signal signal{};
+    constexpr auto N = 99;
     auto src = std::make_shared<jobq::TriggerSource>(
-        "MulitpleTimeTrigger",
-        [&callback_cnt]() { callback_cnt.fetch_add(1); });
+        "MulitpleTimeTrigger", [&callback_cnt, &signal]() {
+            callback_cnt.fetch_add(1);
+            if (callback_cnt == N) {
+                signal.notify();
+            }
+        });
 
     ex.registerSource(src);
 
     auto th = jobq::runExecutor(ex);
 
-    constexpr auto N = 99;
     for (int i = 0; i < N; i++) {
         src->trigger();
     }
-    std::this_thread::sleep_for(20ms);
+    signal.getFuture().wait_for(1s);
     ex.shutdownAndDrain();
     th.join();
 
