@@ -392,7 +392,13 @@ TEST_CASE("multiple concurrent one shot timers") {
         ex.registerSource(src);
     }
     auto th = jobq::runExecutor(ex);
-    signal.getFuture().wait_for(1s);
+    REQUIRE(signal.getFuture().wait_for(1s) == std::future_status::ready);
+    requireEventually(
+        [&ex]() {
+            auto stat = ex.getStats();
+            return stat.jobs_submitted == TIMER_CNT;
+        },
+        "submitted many jobs");
     auto stat = ex.getStats();
     REQUIRE(stat.jobs_submitted == TIMER_CNT);
     ex.shutdownAndDrain();
