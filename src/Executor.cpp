@@ -144,10 +144,15 @@ struct Executor::Impl {
 
     void registerSource(std::shared_ptr<Source> src) {
         std::lock_guard lk{m};
-        src->setReadyCallback([this, src]() {
+        std::weak_ptr<Source> weak_src = src;
+        src->setReadyCallback([this, weak_src]() {
             std::lock_guard lk{source_mtx};
-            ready_sources.push_back(src);
-            source_cv.notify_one();
+            if (auto src = weak_src.lock()) {
+                ready_sources.push_back(src);
+                source_cv.notify_one();
+            } else {
+                loginfo("already expired");
+            }
         });
         sources.push_back(std::move(src));
     }
