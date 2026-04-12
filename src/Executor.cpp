@@ -22,23 +22,28 @@ struct Executor::Impl {
     std::vector<std::thread> worker_threads{};
     std::vector<Worker> workers{};
     std::mutex m{}; // guards access to workers vector, not worker_threads
-    std::thread dispatcher{};
     std::atomic_bool stopped{false};
     size_t nthreads{};
     std::mutex source_mtx{};
-    std::condition_variable source_cv{};
+    std::condition_variable_any source_cv{};
+
+    std::jthread dispatcher{};
 
     std::deque<SharedSourcePtr> ready_sources{};
     std::vector<std::shared_ptr<Source>> sources{};
 
-    explicit Impl(size_t num_threads = 1) : nthreads{num_threads} {}
-    void fetchAndDispatch() {
+    explicit Impl(size_t num_threads = 1) : nthreads{num_threads} {
+        // start dispatcher
+        auto f = std::bind_front(&Executor::Impl::fetchAndDispatch, this);
+        dispatcher = std::jthread{f};
+    }
+    void fetchAndDispatch(std::stop_token token) {
+        setCurrentThreadName("jobq-dispatcher");
         while (true) {
             std::unique_lock uniqlock{source_mtx};
-            source_cv.wait(uniqlock, [this]() {
-                return !ready_sources.empty() || stopped;
-            });
-            if (stopped) {
+            source_cv.wait(uniqlock, token,
+                           [this]() { return !ready_sources.empty(); });
+            if (token.stop_requested()) {
                 loginfo("fetchAndDispatch done, stopped");
                 return;
             }
@@ -88,12 +93,6 @@ struct Executor::Impl {
                 }});
             }
         }
-        // start dispatcher
-        dispatcher = std::thread{[this]() {
-            setCurrentThreadName("jobq-dispatcher");
-            fetchAndDispatch();
-        }};
-        dispatcher.join();
         for (auto &t : worker_threads) {
             t.join();
         }
@@ -102,9 +101,12 @@ struct Executor::Impl {
     void shutdownAndDrain() {
         q.close();
         stopped = true;
+        if (dispatcher.joinable()) {
+            dispatcher.request_stop();
+        }
         source_cv.notify_all();
         // shutdown all sources
-        std::lock_guard lk{m};
+        std::lock_guard lk{source_mtx};
         for (auto src : sources) {
             loginfo("stopping source: {}", src->id());
             src->stop();
@@ -125,12 +127,18 @@ struct Executor::Impl {
     void shutdown() {
         q.close();
         stopped = true;
+        if (dispatcher.joinable()) {
+            dispatcher.request_stop();
+        }
         source_cv.notify_all();
         {
-            std::lock_guard lk{m};
+            std::lock_guard lk{source_mtx};
             for (auto src : sources) {
                 src->stop();
             }
+        }
+        {
+            std::lock_guard lk{m};
             for (auto &w : workers) {
                 w.stop();
             }
@@ -143,7 +151,7 @@ struct Executor::Impl {
     }
 
     void registerSource(std::shared_ptr<Source> src) {
-        std::lock_guard lk{m};
+        std::lock_guard lk{source_mtx};
         std::weak_ptr<Source> weak_src = src;
         src->setReadyCallback([this, weak_src]() {
             std::lock_guard lk{source_mtx};
@@ -155,16 +163,6 @@ struct Executor::Impl {
             }
         });
         sources.push_back(std::move(src));
-    }
-
-    void prepareForDestruction() {
-        // stop all sources
-        if (!stopped) {
-            shutdown();
-        }
-        if (dispatcher.joinable()) {
-            dispatcher.join();
-        }
     }
 
     Stats getStats() {
@@ -184,7 +182,7 @@ struct Executor::Impl {
 Executor::Executor(size_t num_threads)
     : impl_{std::make_unique<Impl>(num_threads)} {}
 
-Executor::~Executor() { impl_->prepareForDestruction(); };
+Executor::~Executor() = default;
 
 void Executor::registerSource(std::shared_ptr<Source> src) {
     impl_->registerSource(src);

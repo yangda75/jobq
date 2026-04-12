@@ -18,6 +18,7 @@ TEST_CASE("run will run") {
     ex.submitJob([&finished]() { finished = true; });
     std::thread t{[&ex]() { ex.run(); }};
     ex.shutdownAndDrain();
+    jobq::loginfo("shutdown and drain done\n");
     t.join();
     REQUIRE(finished);
 }
@@ -119,7 +120,7 @@ TEST_CASE("shutdown will get jobs discarded") {
     std::atomic_bool flag{};
     REQUIRE(ex.submitJob([&flag]() {
         while (!flag) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
         }
     }));
 

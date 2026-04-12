@@ -66,9 +66,9 @@ template <typename Rep, class Period> class TimerSource final : public Source {
     std::chrono::steady_clock::time_point start_time_{};
     Job job_{}; // job id is determined in executor
     std::atomic_bool finished_{};
-    std::jthread timer_thread_{};
     std::mutex mtx_{};
     std::condition_variable_any cv_{};
+    std::jthread timer_thread_{}; // this thread needs to be destroyed first
 };
 
 using TimerSourceMs = TimerSource<int64_t, std::milli>;
