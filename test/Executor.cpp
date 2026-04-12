@@ -49,9 +49,26 @@ class Gate {
     bool open_{false};
 };
 
-/// testcases
-
 using namespace std::chrono_literals;
+const std::chrono::steady_clock::duration kEventuallyTimeout = 3s;
+
+template <typename Predicate>
+void requireEventually(
+    Predicate &&predicate, std::string const &msg,
+    std::chrono::steady_clock::duration timeout = kEventuallyTimeout) {
+
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (predicate()) {
+            return;
+        }
+        std::this_thread::yield();
+    }
+
+    REQUIRE(predicate());
+}
+
+/// testcases
 
 TEST_CASE("run will run") {
     jobq::Executor ex{};
@@ -125,14 +142,16 @@ TEST_CASE("after shutdown, remaining jobs will not run") {
 
 TEST_CASE("empty job and run, will wait for new jobs") {
     jobq::Executor ex{};
-    std::atomic_bool finished{false};
-    std::thread t{[&ex, &finished]() {
+    Signal started{};
+    Signal finished{};
+    std::thread t{[&ex, &started, &finished]() {
+        started.notify();
         ex.run();
-        finished = true;
+        finished.notify();
     }};
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-    REQUIRE(!finished);
+    REQUIRE(started.getFuture().wait_for(2s) == std::future_status::ready);
+    REQUIRE(finished.getFuture().wait_for(20ms) == std::future_status::timeout);
     // stop will stop
     ex.shutdown();
     t.join();
@@ -390,23 +409,31 @@ TEST_CASE("multiple concurrent repeating timers") {
         callback_cnt_vec.emplace_back(
             0); // deque push back is construction in place
     }
+    Gate gate{};
     for (int i = 0; i < TIMER_CNT; i++) {
         jobq::SharedSourcePtr src = std::make_shared<jobq::TimerSourceMs>(
-            jobq::TimerMode::REPEATING, 5ms, [&callback_cnt_vec, i]() {
-                std::this_thread::sleep_for(10ms);
+            jobq::TimerMode::REPEATING, 5ms, [&callback_cnt_vec, i, &gate]() {
+                gate.wait();
                 callback_cnt_vec[i]++;
             });
         ex.registerSource(src);
     }
     auto th = jobq::runExecutor(ex);
-    std::this_thread::sleep_for(100ms);
+    requireEventually(
+        [&ex]() {
+            auto stat = ex.getStats();
+            return stat.jobs_submitted > stat.jobs_executed;
+        },
+        "more jobs submitted than executed");
     auto stat = ex.getStats();
     REQUIRE(stat.jobs_submitted > stat.jobs_executed);
     ex.shutdownAndDrain();
+    gate.open(); // now, all the blocking jobs can execute and finish
     th.join();
     stat = ex.getStats();
     REQUIRE(stat.jobs_submitted == stat.jobs_executed);
 }
+
 TEST_CASE("multiple concurrent repeating timers multiple worker threads") {
     jobq::Executor ex{3};
     std::deque<std::atomic_int> callback_cnt_vec{};
@@ -415,20 +442,33 @@ TEST_CASE("multiple concurrent repeating timers multiple worker threads") {
         callback_cnt_vec.emplace_back(
             0); // deque push back is construction in place
     }
+    Gate gate{};
     for (int i = 0; i < TIMER_CNT; i++) {
         jobq::SharedSourcePtr src = std::make_shared<jobq::TimerSourceMs>(
-            jobq::TimerMode::REPEATING, 1ms, [&callback_cnt_vec, i]() {
-                std::this_thread::sleep_for(10ms);
+            jobq::TimerMode::REPEATING, 1ms, [&callback_cnt_vec, i, &gate]() {
+                gate.wait();
                 callback_cnt_vec[i]++;
             });
         ex.registerSource(src);
     }
     auto th = jobq::runExecutor(ex);
-    std::this_thread::sleep_for(50ms);
+    requireEventually(
+        [&ex]() {
+            auto stat = ex.getStats();
+            return stat.active_workers == 3;
+        },
+        "3 active workers");
+    requireEventually(
+        [&ex]() {
+            auto stat = ex.getStats();
+            return stat.jobs_submitted > stat.jobs_executed;
+        },
+        "more jobs submitted than executed");
     auto stat = ex.getStats();
     REQUIRE(stat.jobs_submitted > stat.jobs_executed);
     REQUIRE(stat.active_workers == 3);
     ex.shutdownAndDrain();
+    gate.open();
     th.join();
     stat = ex.getStats();
     REQUIRE(stat.active_workers == 0);
@@ -438,17 +478,29 @@ TEST_CASE("multiple concurrent repeating timers multiple worker threads") {
 TEST_CASE("shutdownAndDrain finishes already queued callbacks") {
     jobq::Executor ex{};
     std::atomic_int callback_cnt{};
+    Signal started{};
+    Gate gate{};
     jobq::SharedSourcePtr src = std::make_shared<jobq::TimerSourceMs>(
-        jobq::TimerMode::REPEATING, 1ms, [&callback_cnt]() {
-            std::this_thread::sleep_for(10ms);
+        jobq::TimerMode::REPEATING, 1ms, [&callback_cnt, &started, &gate]() {
+            started.notify();
+            gate.wait();
             callback_cnt++;
         });
     ex.registerSource(src);
     auto th = jobq::runExecutor(ex);
-    std::this_thread::sleep_for(100ms);
+    REQUIRE(started.getFuture().wait_for(1s) == std::future_status::ready);
+    // already signaled started
+    // queued jobs not started now
+    requireEventually(
+        [&ex]() {
+            auto stat = ex.getStats();
+            return stat.jobs_submitted > stat.jobs_executed;
+        },
+        "more jobs submitted than executed");
     auto stat = ex.getStats();
     REQUIRE(stat.jobs_submitted > stat.jobs_executed);
     ex.shutdownAndDrain();
+    gate.open(); // let them run to finish
     th.join();
     stat = ex.getStats();
     REQUIRE(stat.jobs_executed == stat.jobs_submitted);
@@ -457,22 +509,30 @@ TEST_CASE("shutdownAndDrain finishes already queued callbacks") {
 TEST_CASE("shutdown discards already queued callbacks") {
     jobq::Executor ex{};
     std::atomic_int callback_cnt{};
+    Signal started{};
+    Gate gate{};
     jobq::SharedSourcePtr src = std::make_shared<jobq::TimerSourceMs>(
-        jobq::TimerMode::REPEATING, 1ms, [&callback_cnt]() {
-            std::this_thread::sleep_for(10ms);
+        jobq::TimerMode::REPEATING, 1ms, [&callback_cnt, &started, &gate]() {
+            started.notify();
+            gate.wait();
             callback_cnt++;
         });
     ex.registerSource(src);
     auto th = jobq::runExecutor(ex);
-    std::this_thread::sleep_for(100ms);
+    REQUIRE(started.getFuture().wait_for(2s) == std::future_status::ready);
+    requireEventually(
+        [&ex]() {
+            auto stat = ex.getStats();
+            return stat.jobs_submitted > stat.jobs_executed + 10;
+        },
+        "more jobs submitted than executed");
     ex.shutdown();
-    std::this_thread::sleep_for(20ms);
-    auto stat = ex.getStats();
-    auto old_executed_jobs = stat.jobs_executed;
-    REQUIRE(stat.jobs_submitted > stat.jobs_executed);
+    gate.open();
     th.join();
-    stat = ex.getStats();
-    REQUIRE(stat.jobs_executed == old_executed_jobs);
+    auto stat = ex.getStats();
+    REQUIRE(stat.jobs_submitted > stat.jobs_executed);
+    REQUIRE(stat.jobs_executed == 1);
+    REQUIRE(stat.jobs_discarded == stat.jobs_submitted - 1);
 }
 
 TEST_CASE("triggerSource trigger multiple times") {

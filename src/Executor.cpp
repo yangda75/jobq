@@ -145,6 +145,7 @@ struct Executor::Impl {
                 w.request_stop();
             }
         }
+        loginfo("shutdown, remaining jobs: {}", q.getDepth());
         // drain the q, discarding
         while (auto job = q.popOne()) {
             // TODO log metadata on discard
