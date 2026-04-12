@@ -69,7 +69,9 @@ TEST_CASE("after shutdown, remaining jobs will not run") {
     for (int i = 0; i < 10; i++) {
         REQUIRE(ex.submitJob([&cnt]() { cnt++; }));
     }
-    REQUIRE(ex.submitJob([&ex]() { ex.shutdown(); }));
+    auto stat = ex.getStats();
+    REQUIRE(stat.jobs_submitted == 10);
+    ex.submitJob([&ex]() { ex.shutdown(); });
     for (int i = 0; i < 10; i++) {
         REQUIRE(ex.submitJob([&cnt]() { cnt++; }));
     }
@@ -191,10 +193,8 @@ TEST_CASE("shutdownAndDrain before run with queued jobs") {
 
 TEST_CASE("registerSource compiles") {
     jobq::Executor ex{};
-    std::shared_ptr<jobq::Source> src =
-        std::make_shared<jobq::TimerSource<int64_t, std::milli>>(
-            jobq::TimerMode::ONE_SHOT, 100ms,
-            []() { jobq::loginfo("timer!!!"); });
+    auto src = std::make_shared<jobq::TimerSource<int64_t, std::milli>>(
+        jobq::TimerMode::ONE_SHOT, 100ms, []() { jobq::loginfo("timer!!!"); });
     ex.registerSource(src);
 }
 

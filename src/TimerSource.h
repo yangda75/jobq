@@ -32,30 +32,26 @@ template <typename Rep, class Period> class TimerSource final : public Source {
 
     bool isFinished() override { return finished_ || stopped_; }
     void stop() override {
+        timer_thread_.request_stop();
         stopped_ = true;
-        cv_.notify_all();
-        timer_thread_.join();
     }
 
     void setReadyCallback(std::function<void()> cb) override {
         Source::setReadyCallback(cb);
-        timer_thread_ = std::thread{[this]() { timerLoop(); }};
+        auto f = std::bind_front(&TimerSource::timerLoop, this);
+        timer_thread_ = std::jthread{f};
     }
 
-    ~TimerSource() {
-        if (!isFinished()) {
-            stop();
-        }
-    }
+    ~TimerSource() override = default;
 
   private:
-    void timerLoop() {
-        while (!stopped_) {
+    void timerLoop(std::stop_token token) {
+        while (!token.stop_requested()) {
             std::unique_lock uniqlock{mtx_};
 
-            cv_.wait_for(uniqlock, timeout_,
-                         [this]() { return stopped_.load(); });
-            if (stopped_) {
+            // when stop is requested, wake up
+            cv_.wait_for(uniqlock, token, timeout_, []() { return false; });
+            if (token.stop_requested()) {
                 break;
             }
             ready_callback_();
@@ -70,9 +66,9 @@ template <typename Rep, class Period> class TimerSource final : public Source {
     std::chrono::steady_clock::time_point start_time_{};
     Job job_{}; // job id is determined in executor
     std::atomic_bool finished_{};
-    std::thread timer_thread_{};
+    std::jthread timer_thread_{};
     std::mutex mtx_{};
-    std::condition_variable cv_{};
+    std::condition_variable_any cv_{};
 };
 
 using TimerSourceMs = TimerSource<int64_t, std::milli>;
