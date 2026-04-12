@@ -19,7 +19,7 @@ struct Executor::Impl {
     std::atomic_int jobs_discarded{};
     std::atomic_int active_workers{};
     Q q{};
-    std::vector<std::thread> worker_threads{};
+    std::vector<std::jthread> worker_threads{};
     std::vector<Worker> workers{};
     std::mutex m{}; // guards access to workers vector, not worker_threads
     std::atomic_bool stopped{false};
@@ -87,9 +87,9 @@ struct Executor::Impl {
                 auto &worker_i = workers[i];
                 worker_i.setExecutedJobCounter(jobs_executed);
                 worker_i.setActiveWorkerCounter(active_workers);
-                worker_threads.emplace_back(std::thread{[&worker_i, i]() {
+                worker_threads.emplace_back(std::jthread{[&worker_i, i](std::stop_token token) {
                     setCurrentThreadName("jobq-worker-" + std::to_string(i));
-                    worker_i.runForever();
+                    worker_i.runForever(token);
                 }});
             }
         }
@@ -139,8 +139,8 @@ struct Executor::Impl {
         }
         {
             std::lock_guard lk{m};
-            for (auto &w : workers) {
-                w.stop();
+            for (auto &w : worker_threads) {
+                w.request_stop();
             }
         }
         // drain the q, discarding

@@ -30,7 +30,7 @@ TEST_CASE("bursted") {
     for (int i = 0; i < M; i++) {
         consumers.emplace_back([&q, &job_cnt] {
             jobq::Worker worker{q};
-            job_cnt.fetch_add(worker.runUntilEmpty());
+            job_cnt.fetch_add(worker.runUntilEmpty({}));
         });
     }
 

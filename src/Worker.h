@@ -2,14 +2,14 @@
 #include "JobQ.h"
 #include <atomic>
 #include <memory>
+#include <stop_token>
 
 namespace jobq {
 class Worker {
   public:
     // return job count finished
-    int runUntilEmpty();
-    int runForever();
-    void stop();
+    int runUntilEmpty(std::stop_token token);
+    int runForever(std::stop_token token);
 
     explicit Worker(Q &);
     ~Worker();

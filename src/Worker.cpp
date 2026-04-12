@@ -1,6 +1,7 @@
 #include "Worker.h"
 #include "Log.h"
 #include <atomic>
+#include <stop_token>
 
 namespace jobq {
 
@@ -21,18 +22,17 @@ struct CounterGuard {
 };
 
 struct Worker::Impl {
-    std::atomic_bool stopped{};
     std::atomic_int *counter{};
     std::atomic_int *active_worker_counter{};
     Impl(Q &q) : q_ref{q} {}
-    int runUntilEmpty() {
+    int runUntilEmpty(std::stop_token token) {
         loginfo("worker started");
-        if (stopped) {
+        if (token.stop_requested()) {
             logerror("cannot restart stopped worker");
             return 0;
         }
         CounterGuard counter_g{active_worker_counter};
-        while (!stopped) {
+        while (!token.stop_requested()) {
             try {
                 auto job = q_ref.popOneFor(1);
                 if (!job.has_value()) {
@@ -46,14 +46,13 @@ struct Worker::Impl {
             } catch (std::exception const &e) {
                 logerror("Failed to run job, exception: {}", e.what());
             }
-
         }
         loginfo("worker done after {} jobs", job_cnt);
         return job_cnt;
     }
-    int runForever() {
+    int runForever(std::stop_token token) {
         loginfo("worker start");
-        if (stopped) {
+        if (token.stop_requested()) {
             logerror("cannot restart stopped worker");
             return 0;
         }
@@ -68,7 +67,7 @@ struct Worker::Impl {
             } catch (std::exception const &e) {
                 logerror("Failed to run job, exception: {}", e.what());
             }
-            if (stopped) {
+            if (token.stop_requested()) {
                 // a job is poped from the q, but will not run, what should I do
                 // here?
                 break;
@@ -78,7 +77,6 @@ struct Worker::Impl {
         return job_cnt;
     }
 
-    void stop() { stopped = true; }
     void setExecutedJobCounter(std::atomic_int &counter_in) {
         counter = &counter_in;
     }
@@ -101,11 +99,13 @@ Worker &Worker::operator=(Worker &&rhs) {
     return *this;
 }
 
-int Worker::runUntilEmpty() { return impl_->runUntilEmpty(); }
+int Worker::runUntilEmpty(std::stop_token token) {
+    return impl_->runUntilEmpty(token);
+}
 
-int Worker::runForever() { return impl_->runForever(); }
-
-void Worker::stop() { impl_->stop(); }
+int Worker::runForever(std::stop_token token) {
+    return impl_->runForever(token);
+}
 
 void Worker::setExecutedJobCounter(std::atomic_int &counter) {
     impl_->setExecutedJobCounter(counter);

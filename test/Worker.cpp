@@ -12,7 +12,7 @@ TEST_CASE("worker can work") {
     for (int i = 0; i < 100; i++) {
         q.pushJob({.fn = [i, &sum]() { sum += i + 1; }});
     }
-    worker.runUntilEmpty();
+    worker.runUntilEmpty({});
     REQUIRE(sum == 5050);
 }
 
@@ -30,7 +30,7 @@ TEST_CASE("multiple workers") {
     for (auto i = 0; i < WORKER_CNT; i++) {
         workers.emplace_back([&q]() {
             jobq::Worker w{q};
-            w.runUntilEmpty();
+            w.runUntilEmpty({});
         });
     }
     for (auto &t : workers) {
